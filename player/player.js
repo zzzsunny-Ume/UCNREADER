@@ -1,9 +1,10 @@
 // Plays a story built by ucn.js: one page per click, layered images, typed text.
 const Player = (() => {
-  const CHAR_MS = 35;   // typing speed per character
-  const WAIT_MS = 600;  // pause for "#w;"
+  // Original: (50 - scenSpeed / 2) ms per character, reader default scenSpeed = 70.
+  const CHAR_MS = 15;
 
   let story, urls, idx = -1, timer = null, typing = null;
+  const vars = {}; // script variables for "$name;" (no UCscript runtime yet)
   const live = new Map(); // node key -> <img>
   const $ = (id) => document.getElementById(id);
 
@@ -62,31 +63,92 @@ const Player = (() => {
   }
 
   // ---- text ----------------------------------------------------------------
+  // Mirrors the original player (UCScenario / UCActionTag in UCMobilePlayer4.swf):
+  //   "#p" and line breaks end a line and wait for a click (empty lines don't);
+  //   "#w;" waits for a click mid-line; "#c;" makes the next line break not wait;
+  //   "#d.N;" pauses N seconds; other "#tag;" are script calls (ignored here);
+  //   "$name;" / "$arr[i];" print a script variable ("" when undefined).
+
+  function tokenize(text) {
+    const s = text.replace(/#p/g, '\n').replace(/\r\n?/g, '\n');
+    const out = [];
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      const semi = ch === '$' || ch === '#' ? s.indexOf(';', i) : -1;
+      if (semi < 0) { out.push(ch === '\n' ? { t: 'nl' } : { t: 'ch', c: ch }); continue; }
+      const tag = s.slice(i + 1, semi);
+      i = semi;
+      if (ch === '$') {
+        for (const c of getVar(tag)) out.push({ t: 'ch', c });
+        continue;
+      }
+      const [name, arg] = tag.split('.');
+      if (name === 'w') out.push({ t: 'w' });
+      else if (name === 'c') out.push({ t: 'c' });
+      else if (name === 'd') out.push({ t: 'd', ms: (parseInt(arg, 10) || 0) * 1000 });
+    }
+    while (out.length && out[out.length - 1].t === 'nl') out.pop();
+    return out;
+  }
+
+  function getVar(tag) {
+    const m = /^(.*)\[(\d+)\]$/.exec(tag);
+    const v = vars[m ? m[1] : tag];
+    if (v == null) return '';
+    return m ? String(v).split(',')[+m[2]] ?? '' : String(v);
+  }
 
   function stopTyping() {
     if (typing) clearTimeout(typing.timer);
     typing = null;
   }
 
-  function paint() {
-    const { paras, para, pos } = typing;
-    const done = paras.slice(0, para).map((p) => p.join(''));
-    $('textbox').textContent = [...done, paras[para].slice(0, pos).join('')].join('\n');
+  function put(str) {
+    const box = $('textbox');
+    const before = typing.out;
+    typing.out += str;
+    box.textContent = typing.out;
+    // Box full: start over with the current line, like the original clearing its text field.
+    if (box.scrollHeight > box.clientHeight + 1) {
+      typing.out = before.slice(before.lastIndexOf('\n') + 1) + str;
+      box.textContent = typing.out;
+    }
   }
 
-  function step() {
+  // Runs tokens until the next stop. `fast` skips typing delays (reader clicked).
+  function run(fast = false) {
     const t = typing;
-    const cur = t.paras[t.para];
-    if (t.pos >= cur.length) { t.busy = false; paint(); onTextIdle(); return; }
-    const tok = cur[t.pos++];
-    if (tok === '') { t.timer = setTimeout(step, WAIT_MS); return; } // "#w;" marker
-    paint();
-    t.timer = setTimeout(step, CHAR_MS);
+    t.state = 'typing';
+    while (t.pos < t.tokens.length) {
+      const tok = t.tokens[t.pos++];
+      if (tok.t === 'ch') {
+        put(tok.c);
+        if (!fast) { t.timer = setTimeout(run, CHAR_MS); return; }
+      } else if (tok.t === 'nl') {
+        const emptyLine = t.out === '' || t.out.endsWith('\n');
+        if (emptyLine || t.noWait) { t.noWait = false; put('\n'); continue; }
+        t.resume = () => put('\n');
+        t.state = 'wait';
+        return;
+      } else if (tok.t === 'w') {
+        t.state = 'wait';
+        return;
+      } else if (tok.t === 'c') {
+        t.noWait = true;
+      } else if (tok.t === 'd' && !fast) {
+        t.timer = setTimeout(run, tok.ms);
+        return;
+      }
+    }
+    t.state = 'done';
+    const pg = story.pages[idx];
+    if (pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
   }
 
   function renderText(pg) {
     stopTyping();
     const box = $('textbox');
+    box.textContent = '';
     if (!pg.text) { box.hidden = true; return; }
     const t = pg.text;
     Object.assign(box.style, {
@@ -95,25 +157,8 @@ const Player = (() => {
       lineHeight: `${story.fontSize + t.leading}px`, color: `#${t.color.padStart(6, '0')}`,
     });
     box.hidden = false;
-    // "#p" splits paragraphs (click to continue); "#w;" becomes an empty token = short pause.
-    const paras = t.text.split('#p').map((p) =>
-      p.split('#w;').flatMap((seg, i) => (i ? ['', ...Array.from(seg)] : Array.from(seg))));
-    typing = { paras, para: 0, pos: 0, busy: true, timer: null };
-    step();
-  }
-
-  function finishParagraph() {
-    clearTimeout(typing.timer);
-    typing.pos = typing.paras[typing.para].length;
-    typing.busy = false;
-    paint();
-    onTextIdle();
-  }
-
-  function onTextIdle() {
-    const pg = story.pages[idx];
-    const last = typing.para === typing.paras.length - 1;
-    if (last && pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
+    typing = { tokens: tokenize(t.text), pos: 0, out: '', state: 'typing', timer: null, noWait: false, resume: null };
+    run();
   }
 
   // ---- navigation ------------------------------------------------------------
@@ -136,12 +181,10 @@ const Player = (() => {
 
   function advance() {
     if (idx < 0 || !$('end').hidden) return;
-    if (typing?.busy) { finishParagraph(); return; }
-    if (typing && typing.para < typing.paras.length - 1) {
-      typing.para++;
-      typing.pos = 0;
-      typing.busy = true;
-      step();
+    if (typing?.state === 'typing') { clearTimeout(typing.timer); run(true); return; }
+    if (typing?.state === 'wait') {
+      if (typing.resume) { typing.resume(); typing.resume = null; }
+      run();
       return;
     }
     clearTimeout(timer);
