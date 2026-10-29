@@ -14,6 +14,8 @@
     --muted: #8a8780;
     --line: #2a2a2e;
     --accent: #c9b99a;
+    --card: #111114;
+    --card-hi: #17161a;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -21,14 +23,47 @@
     font-family: 'Nanum Gothic', '나눔고딕', NanumGothic, sans-serif; }
 
   /* ---- file picker ---- */
-  #picker { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
-  #drop { width: min(480px, 100%); border: 1px dashed var(--line); border-radius: 14px;
-    padding: 48px 24px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
-  #drop.over, #drop:hover { border-color: var(--accent); background: #141416; }
-  #drop h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: .04em; }
-  #drop p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
-  #status { margin-top: 16px; min-height: 1.4em; font-size: 13px; color: var(--accent); }
-  #status.error { color: #e58a7a; }
+  #picker { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+    padding: clamp(40px, 10vh, 96px) 16px 28px; }
+  .intro { width: min(560px, 100%); text-align: center; }
+  .badge { display: inline-block; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px;
+    font-size: 11px; letter-spacing: .12em; color: var(--muted); }
+  .intro h1 { margin: 14px 0 8px; font-size: clamp(26px, 5vw, 34px); font-weight: 700; letter-spacing: .02em; }
+  .intro .lead { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  #drop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px;
+    width: min(560px, 100%); margin-top: 32px; padding: 40px 20px 34px; text-align: center; cursor: pointer;
+    border: 1.5px dashed var(--line); border-radius: 18px; background: var(--card);
+    transition: border-color .2s, background .2s, transform .2s; }
+  #drop:hover, #drop:focus-within { border-color: var(--accent); }
+  body.dragging #drop { border-color: var(--accent); background: var(--card-hi); transform: scale(1.01); }
+  #drop svg { width: 44px; height: 44px; color: var(--accent); }
+  .pick { display: inline-block; padding: 11px 26px; border-radius: 999px; background: var(--accent);
+    color: #19160f; font-size: 15px; font-weight: 700; }
+  #drop .hint { margin: 0; color: var(--muted); font-size: 13px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  #status { width: 100%; font-size: 13px; line-height: 1.6; color: var(--muted); }
+  #status:empty { display: none; }
+  #status.loading { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #status.loading::before { content: ''; width: 12px; height: 12px; border-radius: 50%; flex: none;
+    border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  #status.error { padding: 12px 14px; border-radius: 10px; background: rgba(196,72,58,.12);
+    border: 1px solid rgba(196,72,58,.4); color: #f2b0a6; text-align: left; cursor: default; }
+  #status.error button { margin-top: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: min(560px, 100%);
+    margin: 22px 0 0; padding: 0; list-style: none; }
+  .features li { padding: 14px 14px 13px; border: 1px solid var(--line); border-radius: 12px; }
+  .features b { display: block; margin-bottom: 4px; font-size: 14px; }
+  .features span { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  @media (max-width: 520px) { .features { grid-template-columns: 1fr; } }
+
+  .foot { margin-top: auto; padding-top: 36px; color: var(--muted); font-size: 12px; text-align: center; line-height: 1.7; }
+  .linkish { font: inherit; color: var(--fg); background: none; border: 0; padding: 0;
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  body.picking #tools { display: none; }
 
   /* ---- player ---- */
   #player { position: fixed; inset: 0; background: #000; overflow: hidden; cursor: pointer;
@@ -78,14 +113,36 @@
   #loglines .error { color: #f08a7c; font-weight: 700; }
 </style>
 </head>
-<body>
+<body class="picking">
   <main id="picker">
-    <label id="drop">
+    <header class="intro">
+      <span class="badge">.UCN</span>
       <h1>UCN Reader</h1>
-      <p>.ucn 파일을 여기로 끌어다 놓거나 눌러서 선택하세요.<br>파일은 이 브라우저 안에서만 열립니다.</p>
-      <input id="file" type="file" accept=".ucn" hidden>
-      <div id="status" role="status"></div>
+      <p class="lead">유씨노벨로 만든 <b>.ucn</b> 작품을 브라우저에서 다시 봅니다.</p>
+    </header>
+
+    <label id="drop">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 6h17l9 9v27H12z" stroke-linejoin="round"/>
+        <path d="M29 6v9h9" stroke-linejoin="round"/>
+        <path d="M21 23.5v11l9-5.5z" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="pick">파일 선택</span>
+      <p class="hint">또는 .ucn 파일을 여기로 끌어다 놓으세요</p>
+      <input id="file" class="sr-only" type="file" accept=".ucn">
+      <div id="status" role="status" aria-live="polite"></div>
     </label>
+
+    <ul class="features">
+      <li><b>재생</b><span>클릭할 때마다 한 장씩, 원본 효과 그대로</span></li>
+      <li><b>사진 받기</b><span>작품에 들어 있는 사진을 한 번에 저장</span></li>
+      <li><b>글 저장</b><span>대사와 서술을 장 순서대로 txt로</span></li>
+    </ul>
+
+    <p class="foot">
+      파일은 업로드되지 않고 이 브라우저 안에서만 열립니다.<br>
+      잘 안 열리면 <button class="linkish" type="button" data-open-log>Log 보기</button>에서 로그를 저장해 보내주세요.
+    </p>
   </main>
 
   <div id="player" hidden>
@@ -148,6 +205,11 @@
     if (open) $('loglines').scrollTop = $('loglines').scrollHeight;
   }
   $('t-log').addEventListener('click', () => toggleLog());
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-open-log]')) return;
+    e.preventDefault();
+    toggleLog(true);
+  });
   $('l-close').addEventListener('click', () => toggleLog(false));
   $('l-save').addEventListener('click', () => Export.log(title));
   $('l-copy').addEventListener('click', async () => {
@@ -163,8 +225,10 @@
 
   async function openFile(file) {
     if (!file) return;
-    status.className = '';
+    status.className = 'loading';
     status.textContent = '여는 중…';
+    const progress = (e) => { if (status.className === 'loading') status.textContent = `여는 중… ${e.msg.slice(0, 60)}`; };
+    Log.onAdd(progress);
     try {
       title = file.name.replace(/\.ucn$/i, '') || 'ucn';
       loaded = await UCN.load(file);
@@ -172,18 +236,29 @@
       document.title = title + ' · UCN Reader';
       $('t-img').disabled = $('t-txt').disabled = false;
       $('t-open').hidden = false;
+      document.body.classList.remove('picking');
       Player.start(loaded);
     } catch (e) {
       Log.error(`불러오기 실패: ${e.message || e}`);
       status.className = 'error';
-      status.textContent = `${e.message || e} — 아래 'Log 보기'에서 자세한 내용을 확인하세요.`;
+      status.innerHTML = '<b>파일을 열지 못했습니다.</b><br><span></span><br><button class="linkish" type="button" data-open-log>Log 보기</button>';
+      status.querySelector('span').textContent = e.message || String(e);
     }
   }
 
   document.getElementById('file').addEventListener('change', (e) => openFile(e.target.files[0]));
-  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); openFile(e.dataTransfer.files[0]); });
+  // The whole page is a drop target while the picker is showing.
+  let dragDepth = 0;
+  const picking = () => document.body.classList.contains('picking');
+  window.addEventListener('dragenter', (e) => { e.preventDefault(); if (picking() && ++dragDepth) document.body.classList.add('dragging'); });
+  window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove('dragging');
+    if (picking()) openFile(e.dataTransfer.files[0]);
+  });
 
   document.getElementById('player').addEventListener('click', (e) => {
     if (e.target.closest('#again')) { Player.restart(); return; }
