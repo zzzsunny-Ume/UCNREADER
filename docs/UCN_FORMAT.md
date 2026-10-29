@@ -1,7 +1,7 @@
 # .ucn 파일 포맷 (역공학 노트)
 
 샘플 1개(`de46dac1-1.ucn`, 25.4MB, 2019년 8월 작성)를 분석해 정리한 내용입니다.
-추출기: [`tools/ucn_extract.py`](../tools/ucn_extract.py)
+추출기: [`tools/ucn_extract.py`](../tools/ucn_extract.py) · 웹 플레이어 동작: [`PLAYER.md`](PLAYER.md)
 
 ## 1. 컨테이너
 
