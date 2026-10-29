@@ -38,7 +38,11 @@ const Player = (() => {
         el = document.createElement('img');
         el.className = 'layer';
         el.alt = '';
-        el.src = urls.get(w.file) || '';
+        const url = urls.get(w.file);
+        const pageNo = idx + 1;
+        if (!url) Log.error(`${pageNo}장: 이미지 파일 없음 "${w.file}" (리소스 ${w.ref})`);
+        el.onerror = () => Log.error(`${pageNo}장: 이미지를 표시할 수 없음 "${w.file}" (손상되었거나 지원하지 않는 형식)`);
+        el.src = url || '';
         Object.assign(el.style, { left: `${w.x}px`, top: `${w.y}px`, width: `${w.width}px`, height: `${w.height}px` });
         el._item = w;
         $('layers').append(el);
@@ -168,12 +172,14 @@ const Player = (() => {
     stopTyping();
     $('end').hidden = true;
     if (i < 0) i = 0;
-    if (i >= story.pages.length) { showEnd(); return; }
+    if (i >= story.pages.length) { Log.ok('마지막 장까지 재생 완료'); showEnd(); return; }
     idx = i;
     const pg = story.pages[i];
     renderLayers(pg);
     renderBgm(pg);
     renderText(pg);
+    const imgs = pg.images.map((m) => m.ref).join(', ');
+    Log.info(`${pg.page}장: 배경 ${pg.background?.ref ?? '-'} / 이미지 ${imgs || '-'} / BGM ${pg.bgm?.ref ?? '-'} / ${pg.advance.mode === 'auto' ? `자동 ${pg.advance.ms}ms` : '클릭'}`);
     if (!pg.text && pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
   }
 

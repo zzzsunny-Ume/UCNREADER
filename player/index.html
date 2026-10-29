@@ -52,6 +52,30 @@
   .overlay button { font: inherit; font-size: 13px; color: #fff; background: transparent;
     border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: 8px 18px; cursor: pointer; }
   .overlay button:hover { border-color: #fff; }
+
+  /* ---- tools + log ---- */
+  #tools { position: fixed; left: 12px; bottom: 10px; z-index: 2000; display: flex; flex-wrap: wrap; gap: 6px;
+    opacity: .55; transition: opacity .2s; }
+  #tools:hover, #tools:focus-within, body.log-open #tools { opacity: 1; }
+  #tools button, #logpanel button { font: inherit; font-size: 12px; color: var(--fg); background: rgba(20,20,22,.85);
+    border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  #tools button:hover:not(:disabled), #logpanel button:hover { border-color: var(--accent); }
+  #tools button:disabled { opacity: .4; cursor: default; }
+  #t-err { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 5px; border-radius: 9px;
+    background: #c4483a; color: #fff; font-size: 11px; line-height: 16px; }
+  #t-err:empty { display: none; }
+  #logpanel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1999; height: min(46vh, 420px);
+    display: flex; flex-direction: column; background: #101012; border-top: 1px solid var(--line); color: var(--fg); }
+  #logpanel header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px 8px;
+    border-bottom: 1px solid var(--line); font-size: 13px; }
+  #logpanel header strong { margin-right: auto; }
+  #logpanel .sum { color: var(--muted); font-size: 12px; }
+  #loglines { flex: 1; overflow: auto; margin: 0; padding: 8px 12px 56px; font: 12px/1.55 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all; }
+  #loglines .info { color: var(--muted); }
+  #loglines .ok { color: #8fc79a; }
+  #loglines .warn { color: #e2b35c; }
+  #loglines .error { color: #f08a7c; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -74,24 +98,85 @@
     </div>
   </div>
 
+  <div id="tools">
+    <button id="t-img" type="button" disabled>사진 전부 받기</button>
+    <button id="t-txt" type="button" disabled>글 전부 저장</button>
+    <button id="t-open" type="button" hidden>다른 파일 열기</button>
+    <button id="t-log" type="button" aria-expanded="false">Log 보기<span id="t-err"></span></button>
+  </div>
+  <section id="logpanel" hidden aria-label="로그">
+    <header>
+      <strong>로그</strong>
+      <span class="sum" id="logsum"></span>
+      <button id="l-copy" type="button">복사</button>
+      <button id="l-save" type="button">로그 저장</button>
+      <button id="l-close" type="button">닫기</button>
+    </header>
+    <pre id="loglines"></pre>
+  </section>
+
+<script src="log.js"></script>
 <script src="ucn.js"></script>
 <script src="player.js"></script>
+<script src="export.js"></script>
 <script>
-  const drop = document.getElementById('drop');
-  const status = document.getElementById('status');
+  const $ = (id) => document.getElementById(id);
+  const drop = $('drop');
+  const status = $('status');
+  let loaded = null, title = 'ucn';
+
+  // ---- log panel ----
+  function renderLine(e) {
+    const box = $('loglines');
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const div = document.createElement('div');
+    div.className = e.level;
+    div.textContent = Log.line(e);
+    box.append(div);
+    if (atBottom) box.scrollTop = box.scrollHeight;
+    const c = Log.counts;
+    $('t-err').textContent = c.error || '';
+    $('logsum').textContent = `성공 ${c.ok} · 정보 ${c.info} · 경고 ${c.warn} · 오류 ${c.error}`;
+  }
+  Log.entries.forEach(renderLine);
+  Log.onAdd(renderLine);
+  function toggleLog(open = $('logpanel').hidden) {
+    $('logpanel').hidden = !open;
+    document.body.classList.toggle('log-open', open);
+    $('t-log').setAttribute('aria-expanded', String(open));
+    $('t-log').firstChild.textContent = open ? 'Log 닫기' : 'Log 보기';
+    if (open) $('loglines').scrollTop = $('loglines').scrollHeight;
+  }
+  $('t-log').addEventListener('click', () => toggleLog());
+  $('l-close').addEventListener('click', () => toggleLog(false));
+  $('l-save').addEventListener('click', () => Export.log(title));
+  $('l-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(Log.text()); $('l-copy').textContent = '복사됨'; }
+    catch { $('l-copy').textContent = '복사 실패'; }
+    setTimeout(() => { $('l-copy').textContent = '복사'; }, 1500);
+  });
+  $('t-img').addEventListener('click', () => loaded && Export.images(loaded, title));
+  $('t-txt').addEventListener('click', () => loaded && Export.texts(loaded, title));
+  $('t-open').addEventListener('click', () => location.reload());
+  Log.info(`UCN Reader 시작 · ${navigator.userAgent}`);
+  if (!('DecompressionStream' in window)) Log.error('이 브라우저는 압축 해제(DecompressionStream)를 지원하지 않습니다. 최신 Chrome·Edge·Safari·Firefox를 사용하세요.');
 
   async function openFile(file) {
     if (!file) return;
     status.className = '';
     status.textContent = '여는 중…';
     try {
-      const data = await UCN.load(file);
-      document.getElementById('picker').hidden = true;
-      document.title = file.name.replace(/\.ucn$/i, '') + ' · UCN Reader';
-      Player.start(data);
+      title = file.name.replace(/\.ucn$/i, '') || 'ucn';
+      loaded = await UCN.load(file);
+      $('picker').hidden = true;
+      document.title = title + ' · UCN Reader';
+      $('t-img').disabled = $('t-txt').disabled = false;
+      $('t-open').hidden = false;
+      Player.start(loaded);
     } catch (e) {
+      Log.error(`불러오기 실패: ${e.message || e}`);
       status.className = 'error';
-      status.textContent = e.message || String(e);
+      status.textContent = `${e.message || e} — 아래 'Log 보기'에서 자세한 내용을 확인하세요.`;
     }
   }
 
@@ -106,6 +191,8 @@
     Player.advance();
   });
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('logpanel').hidden) { toggleLog(false); return; }
+    if (e.target.closest?.('button, #logpanel')) return;
     if (document.getElementById('player').hidden) return;
     if (!document.getElementById('begin').hidden) { Player.begin(); return; }
     if ([' ', 'Enter', 'ArrowRight', 'PageDown'].includes(e.key)) { e.preventDefault(); Player.advance(); }
