@@ -27,7 +27,7 @@
 
 | 기능 | 설명 |
 |---|---|
-| 재생 | 장(page) 단위 재생. 배경 → 이미지(z 순서) → 텍스트 순으로 겹쳐 그리고, fade/vortex 등장·퇴장 효과, 자동 넘김 장(오프닝 등)을 원본 시간대로 재현 |
+| 재생 | 장(page) 단위 재생. 배경 → 이미지(z 순서) → 텍스트 순으로 겹쳐 그리고, 원본 앱과 같은 마스크 전환 효과(vortex·water·circle 등 21종)와 fade, 자동 넘김 장(오프닝 등)을 원본 시간대로 재현 |
 | 텍스트 | 한 줄씩 애니메이션 없이 표시(원본 앱의 글자 속도 100 설정과 같음), 줄바꿈·`#p`·`#w;`에서 클릭 대기 등 원본 플레이어 규칙 그대로 |
 | 음악 표시 | 음원은 파일에 들어 있지 않아 재생하지 않음. 해당 장에서 진행 중인 곡 이름만 오른쪽 아래에 `▶ 제목.mp3`로 흐리게 표시 |
 | 사진 전부 받기 | 파일 안 이미지 전체를 `파일명_사진.zip`으로 저장(장면에 쓰이지 않은 사진 포함, 원본 바이트 그대로) |
@@ -61,7 +61,7 @@
 **지원**
 - 컨테이너 해제(UC/PK 헤더, hex 파일명, zlib 데이터), `script.xml` 해석
 - 레이어: `back`(배경), `image`(겹침 이미지), `scenario`(텍스트), `bgm`(곡 이름 표시만)
-- 효과: `fade`, `vortex`(회전+확대로 근사), `none`
+- 효과: `fade`, `none`, 원본 마스크 전환 19종(`hfade` `vfade` `hblind` `vblind` `hcurtain` `vcurtain` `hdoor` `vdoor` `circle` `four` `clock` `dust` `mirage` `water` `star` `drop` `vortex` `lens` `flare`). `white`는 fade로 대체
 - 장 넘김: 클릭(`delay mode="scen"`), 자동(`delay mode=""`, ms)
 - 텍스트 태그: 줄바꿈/`#p`(클릭 대기), `#w;`(줄 중간 클릭 대기), `#c;`, `#d.N;`, `$변수;`(값 없음 → 빈칸)
 
@@ -113,6 +113,7 @@ player/              배포 대상(정적 파일만, 빌드 없음)
   log.js             로그 수집(Log 전역), 전역 오류 포착
   ucn.js             .ucn 해제 + script.xml → 장별 타임라인(UCN.load)
   player.js          재생 엔진: 레이어 합성, 효과, 텍스트 출력, 넘김(Player)
+  masks.js           전환 효과 마스크 21장(원본 앱에서 추출, data URI)
   export.js          사진 zip / 글 txt / 로그 txt 저장(Export)
 tools/
   ucn_extract.py     명령줄 추출기: 이미지·script.xml·story.json
@@ -143,6 +144,10 @@ python3 tools/ucn_extract.py 작품.ucn out/
 
 `main` 브랜치의 `player/` 폴더가 바뀌면 GitHub Actions(`.github/workflows/pages.yml`)가 GitHub Pages로 자동 배포합니다.
 처음 한 번은 저장소 설정이 필요합니다. 절차와 배포 전 점검표는 [`docs/DEPLOY.md`](docs/DEPLOY.md)에 있습니다.
+
+## 전환 마스크 출처
+
+`player/masks.js`의 마스크 그림 21장은 유씨노벨 공식 안드로이드 플레이어(1.0.6) `UCMobilePlayer4.swf`에 들어 있던 원본 그림이며, 저작권은 원저작자에게 있습니다. 원본 작품을 당시와 같은 모습으로 재생하기 위한 목적으로만 포함했습니다.
 
 ## 관련 문서
 

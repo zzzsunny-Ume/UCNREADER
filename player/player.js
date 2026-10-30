@@ -10,19 +10,106 @@ const Player = (() => {
   const live = new Map(); // node key -> <img>
   const $ = (id) => document.getElementById(id);
 
+  // ---- transitions ------------------------------------------------------------
+  // The original (UCBackground) wipes with a grayscale mask per effect (masks.js): the picture's alpha is
+  // mask + 10 + offset, with the offset running 255 → -255 on enter, and on an inverted mask -255 → 255 on
+  // exit, so the darkest parts of the mask change first. "fade" is a plain opacity fade.
+  const isMask = (fx) => fx && fx.effect in UC_MASKS && fx.effect !== 'fade' && fx.effect !== 'white';
+  const masks = new Map(); // effect -> Promise<{ w, h, red } | null>
+  const running = new Set();
+
+  function loadMask(effect) {
+    if (!masks.has(effect)) {
+      masks.set(effect, new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.width;
+          c.height = img.height;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const px = ctx.getImageData(0, 0, c.width, c.height).data;
+          const red = new Uint8Array(c.width * c.height);
+          for (let i = 0; i < red.length; i++) red[i] = px[i * 4];
+          resolve({ w: c.width, h: c.height, red });
+        };
+        img.onerror = () => { Log.warn(`전환 마스크 "${effect}"를 불러오지 못해 효과 없이 표시`); resolve(null); };
+        img.src = UC_MASKS[effect];
+      }));
+    }
+    return masks.get(effect);
+  }
+
+  // Draws `el` through the mask on a canvas laid over it until the wipe ends, then calls done().
+  function maskWipe(el, fx, entering, done) {
+    const run = { canvas: null, cancelled: false };
+    const finish = () => {
+      if (run.cancelled) return;
+      run.cancelled = true;
+      running.delete(run);
+      run.canvas?.remove();
+      if (entering) el.style.visibility = '';
+      done?.();
+    };
+    run.cancel = finish;
+    running.add(run);
+    el._wipe = run;
+    if (entering) el.style.visibility = 'hidden';
+    Promise.all([loadMask(fx.effect), el.decode().catch(() => null)]).then(([mask]) => {
+      if (run.cancelled) return;
+      if (!mask || !el.naturalWidth) { finish(); return; }
+      const w = parseFloat(el.style.width), h = parseFloat(el.style.height);
+      const cv = document.createElement('canvas');
+      cv.className = 'layer';
+      cv.width = w;
+      cv.height = h;
+      Object.assign(cv.style, { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height });
+      el.after(cv);
+      run.canvas = cv;
+      const ctx = cv.getContext('2d');
+      const mc = document.createElement('canvas');
+      mc.width = mask.w;
+      mc.height = mask.h;
+      const mctx = mc.getContext('2d');
+      const img = mctx.createImageData(mask.w, mask.h);
+      const shown = new Uint8ClampedArray(256);
+      const t0 = performance.now();
+      const frame = (now) => {
+        if (run.cancelled) return;
+        const p = Math.min(1, (now - t0) / fx.time);
+        for (let v = 0; v < 256; v++) {
+          const cover = entering ? v + 10 + 255 - 510 * p : 10 - v + 510 * p;
+          shown[v] = 255 - Math.max(0, Math.min(255, cover));
+        }
+        for (let i = 0, a = 3; i < mask.red.length; i++, a += 4) img.data[a] = shown[mask.red[i]];
+        mctx.putImageData(img, 0, 0);
+        cv.style.zIndex = el.style.zIndex;
+        ctx.globalCompositeOperation = 'copy';
+        ctx.drawImage(el, 0, 0, w, h);
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(mc, 0, 0, w, h);
+        if (!entering) el.style.visibility = 'hidden';
+        if (p < 1) requestAnimationFrame(frame);
+        else finish();
+      };
+      requestAnimationFrame(frame);
+    });
+  }
+
   function enter(el, fx) {
     const t = fx?.time || 0;
     if (!fx || fx.effect === 'none' || !t) return 0;
-    const frames = fx.effect === 'vortex'
-      ? [{ opacity: 0, transform: 'rotate(-360deg) scale(0.2)' }, { opacity: 1, transform: 'none' }]
-      : [{ opacity: 0 }, { opacity: 1 }];
-    el.animate(frames, { duration: t, easing: 'ease-out' });
+    if (isMask(fx)) maskWipe(el, fx, true);
+    else el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: t, easing: 'ease-out' });
     return t;
   }
 
   function leave(el, fx, holdMs) {
-    const t = fx?.effect === 'fade' ? fx.time : 0;
-    if (t) {
+    el._wipe?.cancel();
+    const t = fx && fx.effect !== 'none' ? fx.time : 0;
+    if (t && isMask(fx)) {
+      maskWipe(el, fx, false, () => el.remove());
+    } else if (t) {
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: t, fill: 'forwards' }).onfinish = () => el.remove();
     } else {
       // No exit effect: keep it under whatever is fading in, so nothing flashes black.
@@ -252,6 +339,7 @@ const Player = (() => {
   }
 
   function restart() {
+    for (const run of [...running]) run.cancel();
     for (const el of live.values()) el.remove();
     live.clear();
     go(0);

@@ -62,8 +62,13 @@
 - 무대는 `width × height`(기본 800×480) 고정 크기 요소를 창 크기에 맞춰 `transform: scale()`로 확대·축소합니다(비율 유지, 남는 영역 검정).
 - 쌓는 순서: 배경(항상 맨 아래) → 이미지(z 순서) → 텍스트 상자 → BGM 표시 → 시작/끝 오버레이.
   - 표본 파일의 일부 배경 노드에도 `z` 값이 있지만, 그 값을 따르면 배경이 위아래 검은 띠 이미지를 덮어 버려 무시합니다.
-- 등장 효과(`effect type="start"`): `fade` → 투명도 0→1, `vortex` → 회전(-360°)+확대(0.2→1)+투명도, `none`/시간 0 → 즉시. 그 밖의 이름은 fade로 처리.
-- 퇴장 효과(`effect type="end"`): `fade`면 투명도 1→0 후 제거. 효과가 없으면 새로 들어오는 요소의 등장 효과가 끝날 때까지 아래에 남겨 두어 검은 화면이 비치지 않게 함.
+- 전환 효과는 원본 `UCBackground`와 같은 **마스크 전환**입니다. 원본 효과 목록(`m_sMaskList`): `fade` `white` `hfade` `vfade` `hblind` `vblind` `hcurtain` `vcurtain` `hdoor` `vdoor` `circle` `four` `clock` `dust` `mirage` `water` `star` `drop` `vortex` `lens` `flare` `none`. 목록 순서 n번째 효과가 마스크 `e(n+1)`(원본 앱에서 꺼낸 320×240 흑백 JPEG, `masks.js`)를 씁니다.
+  - 등장(`effect type="start"`): 사진의 불투명도 = 255 − clamp(마스크 + 10 + 기준값), 기준값은 효과 시간 동안 255 → −255. **마스크의 어두운 곳부터** 새 사진이 드러납니다.
+  - 퇴장(`effect type="end"`): 반전한 마스크로 기준값 −255 → 255. 역시 어두운 곳부터 사라집니다(원본 바이트코드의 `pushbyte 255`가 부호 있는 −1, 즉 반전).
+  - 구현: 전환하는 동안만 레이어 위에 캔버스를 겹쳐 사진을 마스크로 그리고, 끝나면 원래 이미지로 돌아갑니다. 마스크는 `file://`에서도 픽셀을 읽을 수 있도록 data URI로 넣었습니다.
+  - `fade`는 투명도 전환, `none`/시간 0은 즉시. `white`(흰색 경유 전환)는 아직 fade로 대체.
+  - 원본에는 효과별 위치·크기·회전(`x` `y` `width` `height` `rotation`)과 `option`(`accel` `decel` `hquake` `vquake` `over`) 값도 있으나 아직 반영하지 않습니다(표본 파일은 모두 기본값).
+- 퇴장 효과가 없으면 새로 들어오는 요소의 등장 효과가 끝날 때까지 아래에 남겨 두어 검은 화면이 비치지 않게 함.
 
 ## 텍스트 출력 (`Player.run`)
 

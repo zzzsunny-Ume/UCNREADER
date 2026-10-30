@@ -1,6 +1,6 @@
 # 배포 가이드
 
-UCN Reader는 정적 파일 5개(`player/` 폴더)로 이루어진 웹 페이지입니다. 서버 코드, 빌드, 데이터베이스, 환경변수가 없습니다.
+UCN Reader는 정적 파일 6개(`player/` 폴더)로 이루어진 웹 페이지입니다. 서버 코드, 빌드, 데이터베이스, 환경변수가 없습니다.
 
 ## 배포 대상
 
@@ -10,9 +10,10 @@ UCN Reader는 정적 파일 5개(`player/` 폴더)로 이루어진 웹 페이지
 | `player/log.js` | 로그 |
 | `player/ucn.js` | `.ucn` 해석 |
 | `player/player.js` | 재생 엔진 |
+| `player/masks.js` | 전환 효과 마스크(원본 앱 그림 21장, 약 95KB) |
 | `player/export.js` | 사진/글/로그 저장 |
 
-`index.html`이 나머지 스크립트를 **상대 경로**(`ucn.js` 등)로 불러오므로 다섯 파일을 같은 폴더에 두면 어느 하위 경로(`/ucnreader/` 등)에서도 동작합니다.
+`index.html`이 나머지 스크립트를 **상대 경로**(`ucn.js` 등)로 불러오므로 여섯 파일을 같은 폴더에 두면 어느 하위 경로(`/ucnreader/` 등)에서도 동작합니다.
 `docs/`, `tools/`, `README.md`는 배포하지 않습니다.
 
 ## 현재 저장소 상태
@@ -69,7 +70,7 @@ GitHub Pages의 "브랜치에서 배포" 방식은 저장소 루트(`/`)나 `/do
 4. 주소는 보통 `https://<계정>.github.io/<저장소 이름>/` 입니다. Settings → Pages에 실제 주소가 표시됩니다.
 
 ### 대안
-- **루트 게시**: `player/`의 다섯 파일을 저장소 루트로 옮기고 Pages Source를 "Deploy from a branch → `/ (root)`"로 지정. 이 경우 `README.md`, `docs/`도 함께 공개 URL로 접근 가능해집니다.
+- **루트 게시**: `player/`의 여섯 파일을 저장소 루트로 옮기고 Pages Source를 "Deploy from a branch → `/ (root)`"로 지정. 이 경우 `README.md`, `docs/`도 함께 공개 URL로 접근 가능해집니다.
 - **다른 정적 호스팅**(Netlify, Cloudflare Pages, Vercel 등): 게시 폴더를 `player`로, 빌드 명령은 비워 둡니다.
 
 ## 배포 전 점검표
@@ -93,7 +94,7 @@ GitHub Pages의 "브랜치에서 배포" 방식은 저장소 루트(`/`)나 `/do
 
 ### 배포 환경
 - [ ] HTTPS로 제공(클립보드 복사 기능은 HTTPS 또는 localhost에서만 동작)
-- [ ] 하위 경로(`/<저장소 이름>/`)에서 스크립트 5개가 모두 로드됨(브라우저 개발자 도구 Network 탭)
+- [ ] 하위 경로(`/<저장소 이름>/`)에서 스크립트 5개(`log` `ucn` `masks` `player` `export`)가 모두 로드됨(브라우저 개발자 도구 Network 탭)
 - [ ] Google Fonts 차단 환경에서도 기본 글꼴로 정상 표시
 - [ ] 콘솔 오류 없음
 
