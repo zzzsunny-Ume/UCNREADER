@@ -134,12 +134,39 @@ const Player = (() => {
     return moved || fx.option === 'hquake' || fx.option === 'vquake';
   }
 
-  // Backgrounds take the mask wipes; images only fade (other effect names just move), as in the original.
+  // "white" (backgrounds): a white sheet over the picture fades out on enter and in on exit
+  // (UCBackground.whiteMaskEffect), so the picture comes out of, or goes into, white.
+  function whiteWipe(el, fx, entering, done) {
+    const sheet = document.createElement('div');
+    sheet.className = 'layer white-sheet';
+    Object.assign(sheet.style, { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height, zIndex: el.style.zIndex });
+    el.after(sheet);
+    const run = { cancelled: false };
+    const finish = () => {
+      if (run.cancelled) return;
+      run.cancelled = true;
+      running.delete(run);
+      sheet.remove();
+      done?.();
+    };
+    run.cancel = finish;
+    running.add(run);
+    el._wipe = run;
+    // Keep the sheet in the layer's stacking slot even after renderLayers re-sorts z.
+    const anim = sheet.animate([{ opacity: entering ? 1 : 0 }, { opacity: entering ? 0 : 1 }], { duration: fx.time, fill: 'forwards' });
+    const follow = () => { if (!run.cancelled) { sheet.style.zIndex = el.style.zIndex; requestAnimationFrame(follow); } };
+    requestAnimationFrame(follow);
+    anim.onfinish = finish;
+  }
+
+  // Backgrounds take the mask and white wipes; images only fade (other effect names just move),
+  // as in UCBackground / UCComponent.
   function enter(el, fx, isBg) {
     const t = fx?.time || 0;
     if (!fx || !t) return 0;
     const moving = motion(el, fx, true, isBg);
-    if (fx.effect === 'fade' || (fx.effect === 'white')) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: t, easing: 'ease-out' });
+    if (fx.effect === 'fade') el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: t, easing: 'ease-out' });
+    else if (isBg && fx.effect === 'white') whiteWipe(el, fx, true);
     else if (isBg && isMask(fx)) maskWipe(el, fx, true);
     else if (!moving) return 0;
     return t;
@@ -150,9 +177,11 @@ const Player = (() => {
     const isBg = el._isBg;
     const t = fx?.time || 0;
     const moving = t ? motion(el, fx, false, isBg) : false;
-    if (t && isBg && isMask(fx)) {
+    if (t && isBg && fx.effect === 'white') {
+      whiteWipe(el, fx, false, () => el.remove());
+    } else if (t && isBg && isMask(fx)) {
       maskWipe(el, fx, false, () => el.remove());
-    } else if (t && (fx.effect === 'fade' || fx.effect === 'white')) {
+    } else if (t && fx.effect === 'fade') {
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: t, fill: 'forwards' }).onfinish = () => el.remove();
     } else if (moving) {
       setTimeout(() => el.remove(), t);

@@ -235,7 +235,6 @@ const UCN = (() => {
             for (const e of n.querySelectorAll(':scope > effect')) {
               const ea = (k) => e.getAttribute(k);
               if (ea('effect') === 'none' || !num(ea('time'))) continue; // the original skips these entirely
-              if (ea('effect') === 'white') note('white 전환 (fade로 대체)');
               if (!['none', 'accel', 'decel', 'over', 'hquake', 'vquake', null, ''].includes(ea('option'))) note(`효과 옵션 ${ea('option')} (미지원)`);
             }
             item = {

@@ -62,7 +62,7 @@
 - 컨테이너 해제(UC/PK 헤더, hex 파일명, zlib 데이터), `script.xml` 해석
 - 레이어: `back`(배경), `image`(겹침 이미지), `scenario`(텍스트), `bgm`(곡 이름 표시만)
 - 효과 움직임: 원본처럼 등장·퇴장 때 위치 이동·크기·회전과 `accel`(가속) `decel`(감속) `over`(지나쳤다 돌아옴) `hquake`·`vquake`(흔들림) 옵션 적용
-- 효과: `fade`, `none`, 원본 마스크 전환 19종(배경)(`hfade` `vfade` `hblind` `vblind` `hcurtain` `vcurtain` `hdoor` `vdoor` `circle` `four` `clock` `dust` `mirage` `water` `star` `drop` `vortex` `lens` `flare`). `white`는 fade로 대체
+- 효과: `fade`, `none`, 원본 마스크 전환 19종(배경)(`hfade` `vfade` `hblind` `vblind` `hcurtain` `vcurtain` `hdoor` `vdoor` `circle` `four` `clock` `dust` `mirage` `water` `star` `drop` `vortex` `lens` `flare`). `white`(배경: 흰 판이 걷히며 등장, 덮이며 퇴장)
 - 장 넘김: 클릭(`delay mode="scen"`), 자동(`delay mode=""`, ms), 입력 대기(`delay mode="button"`)
 - 글창: 텍스트 노드의 배경색·불투명도(`background`·`opacity`)·테두리·모서리 둥글기
 - **이름 입력창**: `advtype="input"` 이미지 리소스를 입력칸 + 확인 버튼으로 표시. 작품 스크립트의 `string 변수;` 선언과 `onInput[노드ID](string v) { 변수 = v; gotoPageNext(); }` 처리를 해석해 이후 `$변수;`에 입력값 표시
