@@ -61,7 +61,8 @@
 **지원**
 - 컨테이너 해제(UC/PK 헤더, hex 파일명, zlib 데이터), `script.xml` 해석
 - 레이어: `back`(배경), `image`(겹침 이미지), `scenario`(텍스트), `bgm`(곡 이름 표시만)
-- 효과: `fade`, `none`, 원본 마스크 전환 19종(`hfade` `vfade` `hblind` `vblind` `hcurtain` `vcurtain` `hdoor` `vdoor` `circle` `four` `clock` `dust` `mirage` `water` `star` `drop` `vortex` `lens` `flare`). `white`는 fade로 대체
+- 효과 움직임: 원본처럼 등장·퇴장 때 위치 이동·크기·회전과 `accel`(가속) `decel`(감속) `over`(지나쳤다 돌아옴) `hquake`·`vquake`(흔들림) 옵션 적용
+- 효과: `fade`, `none`, 원본 마스크 전환 19종(배경)(`hfade` `vfade` `hblind` `vblind` `hcurtain` `vcurtain` `hdoor` `vdoor` `circle` `four` `clock` `dust` `mirage` `water` `star` `drop` `vortex` `lens` `flare`). `white`는 fade로 대체
 - 장 넘김: 클릭(`delay mode="scen"`), 자동(`delay mode=""`, ms), 입력 대기(`delay mode="button"`)
 - 글창: 텍스트 노드의 배경색·불투명도(`background`·`opacity`)·테두리·모서리 둥글기
 - **이름 입력창**: `advtype="input"` 이미지 리소스를 입력칸 + 확인 버튼으로 표시. 작품 스크립트의 `string 변수;` 선언과 `onInput[노드ID](string v) { 변수 = v; gotoPageNext(); }` 처리를 해석해 이후 `$변수;`에 입력값 표시
@@ -75,7 +76,6 @@
 - **텍스트 스타일 일부만 반영**: 위치·크기·색·정렬·여백·줄간격. 글창(배경색·불투명도·테두리·둥근 모서리) 반영. 외곽선은 검정 1px 고정, 그림자·배경 이미지·노드별 글꼴은 무시. 글꼴은 나눔고딕.
 - **독자 설정 고정**: 원본의 타이핑 속도·넘김 방식(클릭/자동) 설정 대신 글자 속도 100(한 줄씩 바로 표시)·클릭 넘김으로 고정. 노드별 `speed`는 반영하고 `event`는 아직 반영하지 않음.
 - **효과음**(`@effect`) 미지원, 알 수 없는 등장 효과는 fade로 처리.
-- **효과 움직임 미반영**: 원본 효과의 시작·끝 위치 이동, 크기·회전 변화, 가속·감속·흔들림(`accel` `decel` `hquake` `vquake` `over`) 옵션은 아직 그리지 않음(첫 표본 작품의 이미지 23개 효과에 사용). 이런 값이 있는 파일은 Log에 `(미반영)` 경고로 표시.
 - 휴대폰 세로 화면에서는 800×480 비율 그대로라 작게 보이며, 터치로 이전 장 이동은 없음.
 - 저장/이어보기, 장 번호 표시·이동 없음.
 

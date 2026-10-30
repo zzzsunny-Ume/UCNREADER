@@ -84,6 +84,7 @@ const Player = (() => {
         for (let i = 0, a = 3; i < mask.red.length; i++, a += 4) img.data[a] = shown[mask.red[i]];
         mctx.putImageData(img, 0, 0);
         cv.style.zIndex = el.style.zIndex;
+        cv.style.transform = getComputedStyle(el).transform; // follow any motion on the layer
         ctx.globalCompositeOperation = 'copy';
         ctx.drawImage(el, 0, 0, w, h);
         ctx.globalCompositeOperation = 'destination-in';
@@ -96,21 +97,65 @@ const Player = (() => {
     });
   }
 
-  function enter(el, fx) {
+  // ---- motion -------------------------------------------------------------------
+  // Position/scale/rotation tween that runs alongside the effect (UCComponent / UCBackground.makeTween):
+  // enter moves from (-x, -y), scaled and rotated, into place; exit moves from place to (-x, -y) and the
+  // scale (exit rotation does nothing in the original). Scale is width/height in % for images and in
+  // stage pixels for backgrounds; scaling is about the centre.
+  const EASE = {
+    none: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // TweenMax default, Power1.easeOut
+    accel: 'cubic-bezier(0.755, 0.05, 0.855, 0.06)', // Power4.easeIn
+    decel: 'cubic-bezier(0.23, 1, 0.32, 1)', // Power4.easeOut
+    over: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)', // Back.easeOut
+  };
+
+  function motion(el, fx, entering, isBg) {
+    const t = fx.time;
+    const base = isBg ? [story.width, story.height] : [100, 100];
+    const sx = fx.width == null ? 1 : fx.width / base[0];
+    const sy = fx.height == null ? 1 : fx.height / base[1];
+    const moved = fx.x || fx.y || sx !== 1 || sy !== 1 || (entering && fx.rotation);
+    if (moved) {
+      const off = `translate(${-fx.x}px, ${-fx.y}px) scale(${sx}, ${sy})${entering && fx.rotation ? ` rotate(${fx.rotation}deg)` : ''}`;
+      const frames = entering ? [{ transform: off }, { transform: 'none' }] : [{ transform: 'none' }, { transform: off }];
+      el.animate(frames, { duration: t, easing: EASE[fx.option] ?? EASE.none, fill: entering ? 'none' : 'forwards' });
+    }
+    if (fx.option === 'hquake' || fx.option === 'vquake') {
+      // Every 0.1 s jump 10–15 px aside and back, for the whole effect.
+      const frames = [];
+      const steps = Math.max(1, Math.round(t / 100));
+      for (let i = 0; i < steps; i++) {
+        const d = 10 + Math.random() * 5;
+        frames.push({ translate: '0 0' }, { translate: fx.option === 'hquake' ? `${d}px 0` : `0 ${d}px` });
+      }
+      frames.push({ translate: '0 0' });
+      el.animate(frames, { duration: t });
+    }
+    return moved || fx.option === 'hquake' || fx.option === 'vquake';
+  }
+
+  // Backgrounds take the mask wipes; images only fade (other effect names just move), as in the original.
+  function enter(el, fx, isBg) {
     const t = fx?.time || 0;
-    if (!fx || fx.effect === 'none' || !t) return 0;
-    if (isMask(fx)) maskWipe(el, fx, true);
-    else el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: t, easing: 'ease-out' });
+    if (!fx || !t) return 0;
+    const moving = motion(el, fx, true, isBg);
+    if (fx.effect === 'fade' || (fx.effect === 'white')) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: t, easing: 'ease-out' });
+    else if (isBg && isMask(fx)) maskWipe(el, fx, true);
+    else if (!moving) return 0;
     return t;
   }
 
   function leave(el, fx, holdMs) {
     el._wipe?.cancel();
-    const t = fx && fx.effect !== 'none' ? fx.time : 0;
-    if (t && isMask(fx)) {
+    const isBg = el._isBg;
+    const t = fx?.time || 0;
+    const moving = t ? motion(el, fx, false, isBg) : false;
+    if (t && isBg && isMask(fx)) {
       maskWipe(el, fx, false, () => el.remove());
-    } else if (t) {
+    } else if (t && (fx.effect === 'fade' || fx.effect === 'white')) {
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: t, fill: 'forwards' }).onfinish = () => el.remove();
+    } else if (moving) {
+      setTimeout(() => el.remove(), t);
     } else {
       // No exit effect: keep it under whatever is fading in, so nothing flashes black.
       setTimeout(() => el.remove(), holdMs);
@@ -134,9 +179,10 @@ const Player = (() => {
         el.src = url || '';
         Object.assign(el.style, { left: `${w.x}px`, top: `${w.y}px`, width: `${w.width}px`, height: `${w.height}px` });
         el._item = w;
+        el._isBg = w === pg.background;
         $('layers').append(el);
         live.set(w.key, el);
-        fadeIn = Math.max(fadeIn, enter(el, w.effects.start));
+        fadeIn = Math.max(fadeIn, enter(el, w.effects.start, el._isBg));
       }
       // Background always sits at the bottom; images stack by z (already sorted).
       el.style.zIndex = w === pg.background ? 1 : 10 + i;

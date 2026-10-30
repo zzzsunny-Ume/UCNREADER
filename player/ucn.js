@@ -109,7 +109,15 @@ const UCN = (() => {
   function effects(node) {
     const fx = {};
     for (const e of node.querySelectorAll(':scope > effect')) {
-      fx[e.getAttribute('type')] = { effect: e.getAttribute('effect'), time: num(e.getAttribute('time')) };
+      const a = (k) => e.getAttribute(k);
+      const n = (k) => { const v = parseInt(a(k), 10); return Number.isNaN(v) ? null : v; };
+      // x/y: offset the move starts from (enter) or goes to (exit), negated as in the original;
+      // width/height: % for images, stage pixels for backgrounds; option: easing or shake.
+      fx[a('type')] = {
+        effect: a('effect'), time: num(a('time')),
+        x: n('x') ?? 0, y: n('y') ?? 0, width: n('width'), height: n('height'),
+        rotation: n('rotation') ?? 0, option: a('option') || 'none',
+      };
     }
     return fx;
   }
@@ -227,13 +235,8 @@ const UCN = (() => {
             for (const e of n.querySelectorAll(':scope > effect')) {
               const ea = (k) => e.getAttribute(k);
               if (ea('effect') === 'none' || !num(ea('time'))) continue; // the original skips these entirely
-              const kindTxt = ea('type') === 'end' ? '퇴장' : '등장';
-              if (num(ea('x')) || num(ea('y'))) note(`${kindTxt} 효과의 위치 이동 x/y (미반영)`);
-              const w = ea('width'), h = ea('height');
-              if (w != null && !((w === '100' && h === '100') || (num(w) === stageW && num(h) === stageH))) note(`${kindTxt} 효과의 크기 변화 width/height (미반영)`);
-              if (num(ea('rotation'))) note(`${kindTxt} 효과의 회전 rotation (미반영)`);
-              if (ea('option') && ea('option') !== 'none') note(`${kindTxt} 효과 옵션 ${ea('option')} (미반영)`);
               if (ea('effect') === 'white') note('white 전환 (fade로 대체)');
+              if (!['none', 'accel', 'decel', 'over', 'hquake', 'vquake', null, ''].includes(ea('option'))) note(`효과 옵션 ${ea('option')} (미지원)`);
             }
             item = {
               key: a('id') || `n${order}`, ref, file: res?.file && base(res.file), start, end,
