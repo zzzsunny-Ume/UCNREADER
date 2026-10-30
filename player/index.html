@@ -129,7 +129,8 @@
       </svg>
       <span class="pick">파일 선택</span>
       <p class="hint">또는 .ucn 파일을 여기로 끌어다 놓으세요</p>
-      <input id="file" class="sr-only" type="file" accept=".ucn">
+      <!-- No accept filter: mobile pickers map it to a MIME type, and .ucn has none, so every file was hidden. -->
+      <input id="file" class="sr-only" type="file">
       <div id="status" role="status" aria-live="polite"></div>
     </label>
 
@@ -228,6 +229,7 @@
     if (!file) return;
     status.className = 'loading';
     status.textContent = '여는 중…';
+    if (!/\.ucn$/i.test(file.name)) Log.warn(`확장자가 .ucn이 아닌 파일: ${file.name} (${file.type || '형식 정보 없음'}) — 내용으로 판별해 열어 봅니다`);
     const progress = (e) => { if (status.className === 'loading') status.textContent = `여는 중… ${e.msg.slice(0, 60)}`; };
     Log.onAdd(progress);
     try {
