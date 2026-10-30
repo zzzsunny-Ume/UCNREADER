@@ -116,6 +116,9 @@ const UCN = (() => {
 
   function buildStory(doc) {
     const opt = (p, a) => doc.querySelector(`system > option[parameter="${p}"]`)?.getAttribute(a);
+    const stageW = num(opt('size', 'width'), 800), stageH = num(opt('size', 'height'), 480);
+    const unknown = new Map();
+    const note = (what) => unknown.set(what, (unknown.get(what) || 0) + 1);
     const resources = {};
     for (const o of doc.querySelectorAll('global > resource object')) {
       const at = (k) => o.getAttribute(k);
@@ -124,6 +127,7 @@ const UCN = (() => {
         advtype: at('advtype') || '',
         file: o.querySelector('file')?.getAttribute('name') ?? null,
       };
+      if (at('advtype') && at('advtype') !== 'input') note(`리소스 종류 advtype="${at('advtype')}" (미지원)`);
       if (at('advtype') === 'input') {
         resources[at('id')].input = {
           background: at('background'), opacity: num(at('opacity')), border: num(at('border')),
@@ -151,8 +155,6 @@ const UCN = (() => {
     const pages = [];
     for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], text: null, bgm: null });
 
-    const unknown = new Map();
-    const note = (what) => unknown.set(what, (unknown.get(what) || 0) + 1);
     let order = 0;
     for (const el of scene.children) {
       if (el.tagName === 'delay') {
@@ -161,6 +163,7 @@ const UCN = (() => {
         // mode "scen": wait for the reader's click; "button": wait for an input box to be submitted;
         // mode "": advance after `time` ms.
         const mode = el.getAttribute('mode');
+        if (el.getAttribute('bgm') === 'true' || el.getAttribute('effect') === 'true') note('장 넘김의 bgm/effect 옵션 (미반영)');
         if (mode === 'scen') pg.advance = { mode: 'click' };
         else if (mode === 'button') pg.advance = { mode: 'input' };
         else {
@@ -181,6 +184,14 @@ const UCN = (() => {
             if (!pg) { note(`범위 밖 텍스트(page=${a('page')})`); continue; }
             if (!(a('ref') in texts)) note(`없는 텍스트 ref="${a('ref')}"`);
             if (pg.text) note('한 장에 텍스트 2개 이상 (마지막 것만 표시)');
+            // Text attributes the player doesn't draw yet: flag them when they differ from the defaults.
+            if (num(a('shadowAlpha')) > 0) note('텍스트 그림자 shadowAlpha (미반영)');
+            if (a('backgroundimage')) note('글창 배경 그림 backgroundimage (미반영)');
+            if (num(a('gRotation')) || num(a('gHeight'))) note('텍스트 그라데이션 gRotation/gHeight (미반영)');
+            if ((a('outlinecolor') || '0') !== '0' || num(a('outlineAlpha'), 100) !== 100) note('텍스트 외곽선 색·투명도 (검정 1px로 표시)');
+            if (['para', 'page', 'auto'].includes(a('event'))) note(`텍스트 넘김 방식 event="${a('event')}" (미반영)`);
+            if (a('type')) note(`텍스트 type="${a('type')}" (미반영)`);
+            if (a('invert') === 'true') note('텍스트 invert (미반영)');
             pg.text = {
               text: texts[a('ref')] ?? '', x: num(a('x')), y: num(a('y')),
               width: num(a('width')), height: num(a('height')), align: a('align') || 'center',
@@ -212,6 +223,18 @@ const UCN = (() => {
             continue;
           } else if (kind === 'back' || kind === 'image') {
             if (a('hidden') === 'true') continue;
+            if (a('invert') === 'true') note('이미지 invert (미반영)');
+            for (const e of n.querySelectorAll(':scope > effect')) {
+              const ea = (k) => e.getAttribute(k);
+              if (ea('effect') === 'none' || !num(ea('time'))) continue; // the original skips these entirely
+              const kindTxt = ea('type') === 'end' ? '퇴장' : '등장';
+              if (num(ea('x')) || num(ea('y'))) note(`${kindTxt} 효과의 위치 이동 x/y (미반영)`);
+              const w = ea('width'), h = ea('height');
+              if (w != null && !((w === '100' && h === '100') || (num(w) === stageW && num(h) === stageH))) note(`${kindTxt} 효과의 크기 변화 width/height (미반영)`);
+              if (num(ea('rotation'))) note(`${kindTxt} 효과의 회전 rotation (미반영)`);
+              if (ea('option') && ea('option') !== 'none') note(`${kindTxt} 효과 옵션 ${ea('option')} (미반영)`);
+              if (ea('effect') === 'white') note('white 전환 (fade로 대체)');
+            }
             item = {
               key: a('id') || `n${order}`, ref, file: res?.file && base(res.file), start, end,
               x: num(a('x')), y: num(a('y')), width: num(a('width')), height: num(a('height')),
@@ -253,8 +276,8 @@ const UCN = (() => {
     Log.ok(`타임라인 완성: 텍스트 ${pages.filter((p) => p.text).length}장, 자동 넘김 ${autoPages}장, BGM 구간 ${new Set(pages.map((p) => p.bgm?.key).filter(Boolean)).size}개`);
 
     return {
-      width: num(opt('size', 'width'), 800),
-      height: num(opt('size', 'height'), 480),
+      width: stageW,
+      height: stageH,
       font: opt('font', 'Fontname'),
       fontSize: num(opt('fontsize', 'Fontsize'), 15),
       resources,
