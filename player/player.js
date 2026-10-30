@@ -109,15 +109,33 @@ const Player = (() => {
     typing = null;
   }
 
+  // The rest of the current line, not shown yet.
+  function pendingLine() {
+    let s = '';
+    for (let i = typing.pos; i < typing.tokens.length && typing.tokens[i].t !== 'nl'; i++) {
+      if (typing.tokens[i].t === 'ch') s += typing.tokens[i].c;
+    }
+    return s;
+  }
+
+  // Like the original, the whole line is laid out first and revealed in place: the part not shown
+  // yet is kept as invisible text, so centred text doesn't shift when "#w;" continues the line.
+  function paint() {
+    const ghost = document.createElement('span');
+    ghost.className = 'ghost';
+    ghost.textContent = pendingLine();
+    $('textbox').replaceChildren(typing.out, ghost);
+  }
+
   function put(str) {
     const box = $('textbox');
     const before = typing.out;
     typing.out += str;
-    box.textContent = typing.out;
+    paint();
     // Box full: start over with the current line, like the original clearing its text field.
     if (box.scrollHeight > box.clientHeight + 1) {
       typing.out = before.slice(before.lastIndexOf('\n') + 1) + str;
-      box.textContent = typing.out;
+      paint();
     }
   }
 
