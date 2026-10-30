@@ -17,21 +17,29 @@ UCN Reader는 정적 파일 5개(`player/` 폴더)로 이루어진 웹 페이지
 
 ## 현재 저장소 상태
 
-- 작업 브랜치: `claude/nifty-rubin-52pbfw` (현재 원격에 있는 유일한 브랜치)
-- 배포 전에 이 브랜치를 기본 브랜치(예: `main`)로 병합하거나, 이 브랜치를 기본 브랜치로 지정해야 합니다.
+- 배포 브랜치: `main`
+- 배포 설정: `.github/workflows/pages.yml` — `main`에서 `player/**` 또는 이 파일이 바뀌면 실행, Actions 탭에서 수동 실행도 가능
+- 문의 연락처: jisun645028@gmail.com (README, 첫 화면 하단에 표시)
+
+### 처음 한 번만 할 일 (저장소 설정)
+1. **Settings → General → Default branch**를 `main`으로 바꿉니다.
+2. **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 바꿉니다.
+3. 배포 설정이 들어간 PR을 `main`에 병합하면 첫 배포가 실행됩니다. 이미 병합했다면 **Actions → Deploy player to GitHub Pages → Run workflow**로 실행합니다.
+4. 배포가 끝나면 Settings → Pages 상단에 주소가 표시됩니다(보통 `https://<계정>.github.io/<저장소 이름>/`).
 
 ## GitHub Pages로 배포 (권장: GitHub Actions)
 
 GitHub Pages의 "브랜치에서 배포" 방식은 저장소 루트(`/`)나 `/docs`만 게시할 수 있습니다.
 이 저장소는 `docs/`에 문서가 있으므로, **`player/` 폴더만 올리는 Actions 방식**을 권장합니다.
 
-1. 기본 브랜치에 아래 파일을 추가합니다: `.github/workflows/pages.yml`
+1. 아래 내용이 `.github/workflows/pages.yml`에 들어 있습니다(이미 추가됨).
 
    ```yaml
    name: Deploy player to GitHub Pages
    on:
      push:
-       branches: [main]          # 기본 브랜치 이름에 맞게 수정
+       branches: [main]
+       paths: ['player/**', '.github/workflows/pages.yml']
      workflow_dispatch:
    permissions:
      contents: read
@@ -90,7 +98,7 @@ GitHub Pages의 "브랜치에서 배포" 방식은 저장소 루트(`/`)나 `/do
 
 ### 문서·안내
 - [ ] README의 "지원 범위와 한계"가 현재 동작과 일치
-- [ ] 문제 제보 경로(GitHub 이슈 등)가 실제로 열려 있음
+- [ ] 문의 메일(jisun645028@gmail.com) 링크가 README와 첫 화면에서 열림
 - [ ] 비공식 도구 안내 문구 유지
 
 ## 업데이트·캐시
