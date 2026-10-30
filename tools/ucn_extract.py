@@ -70,6 +70,7 @@ def build_story(root):
         f = obj.find('file')
         resources[obj.get('id')] = {
             'type': obj.get('type'),
+            'advtype': obj.get('advtype') or '',
             'file': f.get('name') if f is not None else None,
             'itemId': obj.get('itemId'),
         }
@@ -91,9 +92,11 @@ def build_story(root):
             p = num(el.get('page'))
             if p in pages:
                 # mode "scen": wait for the reader's click on the text;
-                # mode "": advance on its own after `time` ms.
+                # "button": wait for an input box; mode "": advance on its own after `time` ms.
                 if el.get('mode') == 'scen':
                     pages[p]['advance'] = {'mode': 'click'}
+                elif el.get('mode') == 'button':
+                    pages[p]['advance'] = {'mode': 'input'}
                 else:
                     pages[p]['advance'] = {'mode': 'auto', 'ms': num(el.get('time'))}
             continue
@@ -115,9 +118,20 @@ def build_story(root):
                             'vPadding': num(n.get('vPadding')),
                             'hPadding': num(n.get('hPadding')),
                             'leading': num(n.get('leading')),
+                            'speed': num(n.get('speed')),
+                            'border': num(n.get('border')),
+                            'bordercolor': n.get('bordercolor'),
+                            'radius': num(n.get('radius')),
                         })
                     continue
                 start, end = num(n.get('start')), num(n.get('end'))
+                if kind == 'image' and resources.get(n.get('ref'), {}).get('advtype') == 'input':
+                    # Input box component (name entry etc.); its picture is only a placeholder.
+                    for p in range(max(start, 1), min(end, total) + 1):
+                        pages[p].setdefault('inputs', []).append({
+                            'id': n.get('id'), 'x': num(n.get('x')), 'y': num(n.get('y')),
+                            'width': num(n.get('width')), 'height': num(n.get('height'))})
+                    continue
                 for p in range(max(start, 1), min(end, total) + 1):
                     item = dict(res(n.get('ref')), start=start, end=end)
                     if kind == 'bgm':
@@ -146,6 +160,7 @@ def build_story(root):
         'fontSize': num(system.get('fontsize', {}).get('Fontsize'), 15),
         'owner': root.get('owner'),
         'pageCount': total,
+        'script': (root.findtext('global/script') or '').strip(),
         'resources': resources,
         'pages': [pages[p] for p in sorted(pages)],
     }

@@ -6,7 +6,7 @@ const Player = (() => {
   const READER_SPEED = 100;
 
   let story, urls, idx = -1, timer = null, typing = null;
-  const vars = {}; // script variables for "$name;" (no UCscript runtime yet)
+  const vars = {}; // script variables for "$name;", set by input boxes (see UCN.parseScript)
   const live = new Map(); // node key -> <img>
   const $ = (id) => document.getElementById(id);
 
@@ -257,6 +257,72 @@ const Player = (() => {
     if (pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
   }
 
+  const rgba = (hex, a) => {
+    const n = parseInt(hex || '0', 16) || 0;
+    return `rgba(${n >> 16 & 255}, ${n >> 8 & 255}, ${n & 255}, ${Math.max(0, Math.min(1, a))})`;
+  };
+
+  // ---- input boxes -------------------------------------------------------------
+  // Layout follows UCInput: an entry field and a button inside the node's box; submitting runs the
+  // node's onInput handler from the work's script (usually: store the value, go to the next page).
+  const inputs = new Map(); // node id -> element
+
+  function renderInputs(pg) {
+    const want = new Set(pg.inputs.map((n) => n.key));
+    for (const [key, el] of inputs) if (!want.has(key)) { el.remove(); inputs.delete(key); }
+    for (const n of pg.inputs) {
+      if (inputs.has(n.key)) continue;
+      const st = n.style || {};
+      const box = document.createElement('form');
+      box.className = 'uc-input';
+      Object.assign(box.style, {
+        left: `${n.x}px`, top: `${n.y}px`, width: `${n.width}px`, height: `${n.height}px`,
+        backgroundColor: rgba(st.background, (st.opacity ?? 0) / 100),
+        border: st.border > 0 ? `1px solid #${(st.bordercolor || 'ffffff').padStart(6, '0')}` : 'none',
+        borderRadius: `${(st.radius || 0) * 2}px`,
+        color: `#${(st.btncolor || 'ffffff').padStart(6, '0')}`,
+      });
+      const field = document.createElement('input');
+      field.type = 'text';
+      field.maxLength = 20;
+      field.autocomplete = 'off';
+      field.setAttribute('aria-label', '입력');
+      const first = n.handler?.find((x) => x.op === 'set');
+      if (first && vars[first.name]) field.value = vars[first.name];
+      const btn = document.createElement('button');
+      btn.type = 'submit';
+      btn.textContent = '확인';
+      Object.assign(btn.style, {
+        backgroundColor: rgba(st.btnbackground || 'ffffff', (st.btnopacity ?? 0) / 100),
+        color: `#${(st.btncolor || 'ffffff').padStart(6, '0')}`,
+      });
+      box.append(field, btn);
+      // Keep taps and keys inside the box from turning the page.
+      for (const ev of ['click', 'pointerdown', 'keydown']) box.addEventListener(ev, (e) => e.stopPropagation());
+      box.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const value = field.value.trim();
+        if (!value) { box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); field.focus(); return; }
+        submitInput(n, value);
+      });
+      $('stage').append(box);
+      inputs.set(n.key, box);
+      setTimeout(() => field.focus({ preventScroll: true }), 50);
+    }
+  }
+
+  function submitInput(n, value) {
+    const steps = n.handler ?? [{ op: 'set', name: n.id }, { op: 'next' }];
+    if (!n.handler) Log.warn(`입력창 ${n.id}에 연결된 onInput 처리가 없어 값만 저장하고 넘어감`);
+    for (const step of steps) {
+      if (step.op === 'set') {
+        vars[step.name] = value;
+        Log.ok(`${idx + 1}장 입력: 변수 "${step.name}"에 ${[...value].length}자 저장`);
+      } else if (step.op === 'next') { next(); return; }
+      else if (step.op === 'prev') { go(idx - 1); return; }
+    }
+  }
+
   function renderText(pg) {
     stopTyping();
     const box = $('textbox');
@@ -267,6 +333,10 @@ const Player = (() => {
       left: `${t.x}px`, top: `${t.y}px`, width: `${t.width}px`, height: `${t.height}px`,
       padding: `${t.vPadding}px ${t.hPadding}px`, textAlign: t.align,
       lineHeight: `${story.fontSize + t.leading}px`, color: `#${t.color.padStart(6, '0')}`,
+      // Text window as UCScenario draws it: fill with alpha, 1px border, rounded corners (radius × 4 wide).
+      backgroundColor: rgba(t.bg, t.bgOpacity / 100),
+      border: t.border > 0 ? `1px solid #${t.bordercolor.padStart(6, '0')}` : 'none',
+      borderRadius: `${t.radius * 2}px`,
     });
     box.hidden = false;
     const speed = t.speed || READER_SPEED;
@@ -288,8 +358,9 @@ const Player = (() => {
     renderLayers(pg);
     renderBgm(pg);
     renderText(pg);
+    renderInputs(pg);
     const imgs = pg.images.map((m) => m.ref).join(', ');
-    Log.info(`${pg.page}장: 배경 ${pg.background?.ref ?? '-'} / 이미지 ${imgs || '-'} / BGM ${pg.bgm?.ref ?? '-'} / ${pg.advance.mode === 'auto' ? `자동 ${pg.advance.ms}ms` : '클릭'}`);
+    Log.info(`${pg.page}장: 배경 ${pg.background?.ref ?? '-'} / 이미지 ${imgs || '-'} / BGM ${pg.bgm?.ref ?? '-'} / ${{ auto: `자동 ${pg.advance.ms}ms`, input: '입력 대기' }[pg.advance.mode] ?? '클릭'}`);
     if (!pg.text && pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
   }
 
@@ -303,6 +374,8 @@ const Player = (() => {
       run();
       return;
     }
+    // Input pages only move on when the box is submitted.
+    if (story.pages[idx].advance.mode === 'input') { $('stage').querySelector('.uc-input input')?.focus(); return; }
     clearTimeout(timer);
     next();
   }
@@ -323,6 +396,7 @@ const Player = (() => {
 
   function start(data) {
     ({ story, urls } = data);
+    Object.assign(vars, story.vars);
     const stage = $('stage');
     stage.style.width = `${story.width}px`;
     stage.style.height = `${story.height}px`;
@@ -342,6 +416,8 @@ const Player = (() => {
     for (const run of [...running]) run.cancel();
     for (const el of live.values()) el.remove();
     live.clear();
+    for (const el of inputs.values()) el.remove();
+    inputs.clear();
     go(0);
   }
 

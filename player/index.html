@@ -82,6 +82,15 @@
     text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
                  0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000; }
   #textbox .ghost { visibility: hidden; }
+  /* Input box (UCInput): entry field near the top, button near the bottom of the node's box. */
+  .uc-input { position: absolute; z-index: 1001; margin: 0; cursor: default; font-family: inherit; }
+  .uc-input input { position: absolute; left: 20px; right: 20px; top: 40px; height: 40px; width: calc(100% - 40px);
+    padding: 0 6px; border: 0; outline: 0; background: transparent; color: inherit; font: inherit;
+    font-size: 22px; text-align: center; caret-color: currentColor; user-select: text; -webkit-user-select: text; }
+  .uc-input button { position: absolute; left: 20px; top: 110px; width: calc(100% - 40px); height: 40px;
+    border: 1px solid currentColor; border-radius: 20px; font: inherit; font-size: 15px; letter-spacing: .1em; cursor: pointer; }
+  .uc-input.shake { animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
   #bgm { position: absolute; right: 10px; bottom: 6px; z-index: 1001; font-size: 10px;
     color: #fff; opacity: .28; letter-spacing: .02em; pointer-events: none; }
   .overlay { position: absolute; inset: 0; z-index: 1002; display: flex; flex-direction: column;
@@ -276,7 +285,7 @@
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('logpanel').hidden) { toggleLog(false); return; }
-    if (e.target.closest?.('button, #logpanel')) return;
+    if (e.target.closest?.('button, input, #logpanel')) return;
     if (document.getElementById('player').hidden) return;
     if (!document.getElementById('begin').hidden) { Player.begin(); return; }
     if ([' ', 'Enter', 'ArrowRight', 'PageDown'].includes(e.key)) { e.preventDefault(); Player.advance(); }

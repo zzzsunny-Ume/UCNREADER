@@ -58,7 +58,9 @@ ZIP을 살짝 변형한 구조입니다.
 - 배경/이미지/BGM은 `start ≤ 현재장 ≤ end` 구간 동안 유지됩니다.
 - 이미지 겹침 순서는 `z` 오름차순(작을수록 아래), 같으면 문서 순서.
 - `<effect type="start|end" effect="…" time="ms" x y width height rotation option>` 등장/퇴장 효과. 효과 이름 22종과 마스크 동작은 [`PLAYER.md`](PLAYER.md) 참고.
-- 넘김: `delay mode=""` → 자동(time ms), `mode="scen"` 또는 delay 없음 → 클릭.
+- 넘김: `delay mode=""` → 자동(time ms), `mode="scen"` 또는 delay 없음 → 클릭, `mode="button"` → 입력창 제출 대기.
+- 텍스트 노드의 `background`·`opacity`(0~100)·`border`·`bordercolor`·`radius`는 글창(텍스트 상자 배경) 모양, `speed`는 글자 속도(0 = 독자 설정), `event`는 넘김 방식.
+- `advtype="input"` 이미지 리소스는 이름 입력창 컴포넌트. 입력 처리는 `<global><script>`의 `onInput[노드ID]` 함수([`PLAYER.md`](PLAYER.md) "이름 입력창").
 
 ### 텍스트 마크업
 원본 플레이어 코드(`UCScenario`, `UCActionTag.convertTag`)에서 확인한 규칙입니다.

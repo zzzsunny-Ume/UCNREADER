@@ -118,10 +118,19 @@ const UCN = (() => {
     const opt = (p, a) => doc.querySelector(`system > option[parameter="${p}"]`)?.getAttribute(a);
     const resources = {};
     for (const o of doc.querySelectorAll('global > resource object')) {
-      resources[o.getAttribute('id')] = {
-        type: o.getAttribute('type'),
+      const at = (k) => o.getAttribute(k);
+      resources[at('id')] = {
+        type: at('type'),
+        advtype: at('advtype') || '',
         file: o.querySelector('file')?.getAttribute('name') ?? null,
       };
+      if (at('advtype') === 'input') {
+        resources[at('id')].input = {
+          background: at('background'), opacity: num(at('opacity')), border: num(at('border')),
+          bordercolor: at('bordercolor'), radius: num(at('radius')),
+          btncolor: at('btncolor'), btnbackground: at('btnbackground'), btnopacity: num(at('btnopacity')),
+        };
+      }
     }
     const byType = {};
     for (const r of Object.values(resources)) byType[r.type] = (byType[r.type] || 0) + 1;
@@ -131,8 +140,7 @@ const UCN = (() => {
     for (const n of doc.querySelectorAll('global > scenario > node')) texts[n.getAttribute('id')] = n.textContent;
     Log.ok(`대사/서술 텍스트 ${Object.keys(texts).length}개`);
 
-    const script = doc.querySelector('global > script')?.textContent.trim() ?? '';
-    if (script && script !== ';;') Log.warn(`작품 스크립트 ${script.length}자 있음 — 스크립트 실행은 아직 지원하지 않음 (선택지·이름 입력 등이 동작하지 않을 수 있음)`);
+    const script = parseScript(doc.querySelector('global > script')?.textContent ?? '');
 
     const scenes = doc.querySelectorAll('content > scene');
     if (!scenes.length) throw new Error('<content><scene>이 없습니다.');
@@ -141,7 +149,7 @@ const UCN = (() => {
     const total = num(scene.getAttribute('page'));
     Log.ok(`장면 "${scene.getAttribute('id')}": ${total}장`);
     const pages = [];
-    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], text: null, bgm: null });
+    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], text: null, bgm: null });
 
     const unknown = new Map();
     const note = (what) => unknown.set(what, (unknown.get(what) || 0) + 1);
@@ -150,9 +158,15 @@ const UCN = (() => {
       if (el.tagName === 'delay') {
         const pg = pages[num(el.getAttribute('page')) - 1];
         if (!pg) { note(`범위 밖 delay(page=${el.getAttribute('page')})`); continue; }
-        // mode "scen": wait for the reader's click; mode "": advance after `time` ms.
-        pg.advance = el.getAttribute('mode') === 'scen'
-          ? { mode: 'click' } : { mode: 'auto', ms: num(el.getAttribute('time')) };
+        // mode "scen": wait for the reader's click; "button": wait for an input box to be submitted;
+        // mode "": advance after `time` ms.
+        const mode = el.getAttribute('mode');
+        if (mode === 'scen') pg.advance = { mode: 'click' };
+        else if (mode === 'button') pg.advance = { mode: 'input' };
+        else {
+          if (mode) note(`delay mode="${mode}" (자동 넘김으로 처리)`);
+          pg.advance = { mode: 'auto', ms: num(el.getAttribute('time')) };
+        }
         continue;
       }
       if (el.tagName !== 'folder') { note(`<${el.tagName}>`); continue; }
@@ -173,6 +187,9 @@ const UCN = (() => {
               color: a('color') || 'ffffff', outline: a('outlinecolor'), outlineAlpha: num(a('outlineAlpha')),
               vPadding: num(a('vPadding')), hPadding: num(a('hPadding')), leading: num(a('leading')),
               speed: num(a('speed')),
+              // Text window: fill colour + opacity (0..100), border and corner radius, as UCScenario draws it.
+              bg: a('background') || '0', bgOpacity: num(a('opacity')),
+              border: num(a('border')), bordercolor: a('bordercolor') || 'ffffff', radius: num(a('radius')),
             };
             continue;
           }
@@ -183,6 +200,15 @@ const UCN = (() => {
           let item;
           if (kind === 'bgm') {
             item = { key: a('id'), ref, file: res?.file, start, end };
+          } else if (kind === 'image' && res?.advtype === 'input') {
+            // An input box component; its picture is only the editor's placeholder.
+            item = {
+              key: a('id'), id: a('id'), ref, start, end, style: res.input,
+              x: num(a('x')), y: num(a('y')), width: num(a('width')), height: num(a('height')),
+              handler: script.onInput[a('id')] ?? null,
+            };
+            for (let p = Math.max(start, 1); p <= Math.min(end, total); p++) pages[p - 1].inputs.push(item);
+            continue;
           } else if (kind === 'back' || kind === 'image') {
             if (a('hidden') === 'true') continue;
             item = {
@@ -215,10 +241,13 @@ const UCN = (() => {
     }
     if (tags.size) Log.info(`텍스트 태그 사용: ${[...tags].map(([k, v]) => `${k}×${v}`).join(', ')}`);
     for (const k of tags.keys()) {
-      if (k[0] === '$') Log.warn(`변수 ${k} 사용 — 스크립트 미지원이라 빈칸으로 표시됨`);
-      else if (!['#w;', '#c;', '#d;'].includes(k)) Log.warn(`태그 ${k} — 스크립트 호출이라 무시됨`);
+      if (k[0] === '$') {
+        if (!(k.slice(1, -1).replace(/\[\d+\]$/, '') in script.vars)) Log.warn(`변수 ${k} 사용 — 선언된 스크립트 변수가 없어 빈칸으로 표시됨`);
+      } else if (!['#w;', '#c;', '#d;'].includes(k)) Log.warn(`태그 ${k} — 스크립트 호출이라 무시됨`);
     }
 
+    const inputs = pages.reduce((n, p) => n + p.inputs.length, 0);
+    if (inputs) Log.ok(`입력창 ${inputs}개 (${pages.filter((p) => p.inputs.length).map((p) => `${p.page}장`).join(', ')})`);
     const autoPages = pages.filter((p) => p.advance.mode === 'auto').length;
     Log.ok(`타임라인 완성: 텍스트 ${pages.filter((p) => p.text).length}장, 자동 넘김 ${autoPages}장, BGM 구간 ${new Set(pages.map((p) => p.bgm?.key).filter(Boolean)).size}개`);
 
@@ -229,8 +258,42 @@ const UCN = (() => {
       fontSize: num(opt('fontsize', 'Fontsize'), 15),
       resources,
       texts,
+      vars: script.vars,
       pages,
     };
+  }
+
+  // A small subset of UCscript, enough for name input: global variable declarations and
+  // `void onInput[nodeId](string v) { 변수 = v; gotoPageNext(); }` handlers. Anything else is logged.
+  function parseScript(src) {
+    const out = { vars: {}, onInput: {} };
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').trim();
+    if (!code || /^;*$/.test(code)) return out;
+    const NAME = '[^\\s;=(){}\\[\\],]+';
+    const unsupported = [];
+    const top = code.replace(new RegExp(`void\\s+(${NAME})(\\[[^\\]]*\\])?\\s*\\(([^)]*)\\)\\s*\\{([^{}]*)\\}`, 'g'), (all, fn, idx, params, body) => {
+      const m = /^\[(\d+)\]$/.exec(idx || '');
+      const param = params.trim().split(/\s+/).pop();
+      if (fn !== 'onInput' || !m || !param) { unsupported.push(`함수 ${fn}${idx || ''}`); return ''; }
+      const steps = [];
+      for (const st of body.split(';').map((x) => x.trim()).filter(Boolean)) {
+        const set = new RegExp(`^(${NAME})\\s*=\\s*${param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).exec(st);
+        if (set) steps.push({ op: 'set', name: set[1] });
+        else if (/^gotoPageNext\(\s*\)$/.test(st)) steps.push({ op: 'next' });
+        else if (/^gotoPagePrev\(\s*\)$/.test(st)) steps.push({ op: 'prev' });
+        else unsupported.push(`문장 "${st.slice(0, 40)}"`);
+      }
+      out.onInput[m[1]] = steps;
+      return '';
+    });
+    for (const st of top.split(';').map((x) => x.trim()).filter(Boolean)) {
+      const m = new RegExp(`^(string|int|double|bool|boolean)\\s+(${NAME})\\s*(?:=\\s*(.+))?$`).exec(st);
+      if (m) out.vars[m[2]] = m[3] ? m[3].trim().replace(/^"(.*)"$/, '$1') : '';
+      else unsupported.push(`문장 "${st.slice(0, 40)}"`);
+    }
+    Log.ok(`작품 스크립트: 변수 ${Object.keys(out.vars).length}개(${Object.keys(out.vars).join(', ') || '-'}), 입력 처리 ${Object.keys(out.onInput).length}개`);
+    if (unsupported.length) Log.warn(`작품 스크립트 중 지원하지 않는 부분 ${unsupported.length}개 — 동작하지 않음: ${unsupported.slice(0, 5).join(', ')}${unsupported.length > 5 ? ' …' : ''}`);
+    return out;
   }
 
   async function load(file) {
