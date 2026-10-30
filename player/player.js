@@ -1,7 +1,9 @@
 // Plays a story built by ucn.js: one page per click, layered images, typed text.
 const Player = (() => {
-  // Original: (50 - scenSpeed / 2) ms per character, reader default scenSpeed = 70.
-  const CHAR_MS = 15;
+  // Text speed 1..100 as in the original: (50 - speed / 2) ms per character, 100 = whole line at once.
+  // A node's own `speed` wins; 0 means "reader setting". The original app defaulted to 70;
+  // we default to 100 (no typing animation).
+  const READER_SPEED = 100;
 
   let story, urls, idx = -1, timer = null, typing = null;
   const vars = {}; // script variables for "$name;" (no UCscript runtime yet)
@@ -119,15 +121,16 @@ const Player = (() => {
     }
   }
 
-  // Runs tokens until the next stop. `fast` skips typing delays (reader clicked).
-  function run(fast = false) {
+  // Runs tokens until the next stop. `skip` (reader clicked) also skips "#d.N;" pauses.
+  function run(skip = false) {
     const t = typing;
+    const instant = skip || t.charMs === 0;
     t.state = 'typing';
     while (t.pos < t.tokens.length) {
       const tok = t.tokens[t.pos++];
       if (tok.t === 'ch') {
         put(tok.c);
-        if (!fast) { t.timer = setTimeout(run, CHAR_MS); return; }
+        if (!instant) { t.timer = setTimeout(run, t.charMs); return; }
       } else if (tok.t === 'nl') {
         const emptyLine = t.out === '' || t.out.endsWith('\n');
         if (emptyLine || t.noWait) { t.noWait = false; put('\n'); continue; }
@@ -139,7 +142,7 @@ const Player = (() => {
         return;
       } else if (tok.t === 'c') {
         t.noWait = true;
-      } else if (tok.t === 'd' && !fast) {
+      } else if (tok.t === 'd' && !skip) {
         t.timer = setTimeout(run, tok.ms);
         return;
       }
@@ -161,7 +164,9 @@ const Player = (() => {
       lineHeight: `${story.fontSize + t.leading}px`, color: `#${t.color.padStart(6, '0')}`,
     });
     box.hidden = false;
-    typing = { tokens: tokenize(t.text), pos: 0, out: '', state: 'typing', timer: null, noWait: false, resume: null };
+    const speed = t.speed || READER_SPEED;
+    const charMs = speed >= 100 ? 0 : 50 - speed / 2;
+    typing = { tokens: tokenize(t.text), pos: 0, out: '', state: 'typing', timer: null, noWait: false, resume: null, charMs };
     run();
   }
 

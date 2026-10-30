@@ -172,6 +172,7 @@ const UCN = (() => {
               width: num(a('width')), height: num(a('height')), align: a('align') || 'center',
               color: a('color') || 'ffffff', outline: a('outlinecolor'), outlineAlpha: num(a('outlineAlpha')),
               vPadding: num(a('vPadding')), hPadding: num(a('hPadding')), leading: num(a('leading')),
+              speed: num(a('speed')),
             };
             continue;
           }
