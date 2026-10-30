@@ -186,7 +186,8 @@ const UCN = (() => {
               width: num(a('width')), height: num(a('height')), align: a('align') || 'center',
               color: a('color') || 'ffffff', outline: a('outlinecolor'), outlineAlpha: num(a('outlineAlpha')),
               vPadding: num(a('vPadding')), hPadding: num(a('hPadding')), leading: num(a('leading')),
-              speed: num(a('speed')),
+              // Stored on a 0..9 scale; the original player uses speed / 9 × 100 (9 = whole line at once).
+              speed: Math.round(num(a('speed')) / 9 * 100),
               // Text window: fill colour + opacity (0..100), border and corner radius, as UCScenario draws it.
               bg: a('background') || '0', bgOpacity: num(a('opacity')),
               border: num(a('border')), bordercolor: a('bordercolor') || 'ffffff', radius: num(a('radius')),

@@ -59,7 +59,7 @@ ZIP을 살짝 변형한 구조입니다.
 - 이미지 겹침 순서는 `z` 오름차순(작을수록 아래), 같으면 문서 순서.
 - `<effect type="start|end" effect="…" time="ms" x y width height rotation option>` 등장/퇴장 효과. 효과 이름 22종과 마스크 동작은 [`PLAYER.md`](PLAYER.md) 참고.
 - 넘김: `delay mode=""` → 자동(time ms), `mode="scen"` 또는 delay 없음 → 클릭, `mode="button"` → 입력창 제출 대기.
-- 텍스트 노드의 `background`·`opacity`(0~100)·`border`·`bordercolor`·`radius`는 글창(텍스트 상자 배경) 모양, `speed`는 글자 속도(0 = 독자 설정), `event`는 넘김 방식.
+- 텍스트 노드의 `background`·`opacity`(0~100)·`border`·`bordercolor`·`radius`는 글창(텍스트 상자 배경) 모양, `speed`는 글자 속도(0~9, 0 = 독자 설정), `event`는 넘김 방식.
 - `advtype="input"` 이미지 리소스는 이름 입력창 컴포넌트. 입력 처리는 `<global><script>`의 `onInput[노드ID]` 함수([`PLAYER.md`](PLAYER.md) "이름 입력창").
 
 ### 텍스트 마크업
@@ -77,7 +77,7 @@ ZIP을 살짝 변형한 구조입니다.
 - `$` 또는 `#` 뒤 첫 `;`까지가 태그. `;`가 없으면 문자 그대로 출력(예: `# 우주의 연하`).
 - 이름 입력은 플레이어 기능이 아니라 작품마다 `input` 컴포넌트 + 스크립트(`onInput`)로 변수에 넣는 방식.
   그래서 `$성;`, `$이름;` 같은 변수 이름도 작가마다 다름.
-- 타이핑 속도: 글자당 `(50 - scenSpeed/2)` ms. 노드 `speed=0`이면 독자 설정값(기본 70 → 15ms), 100이면 즉시.
+- 타이핑 속도: 글자당 `(50 - scenSpeed/2)` ms, 100이면 줄 단위 즉시. 노드 `speed`는 0~9 단계로 저장되어 `÷ 9 × 100`으로 변환(9 → 100). `speed=0`이면 독자 설정값(기본 70 → 15ms).
 - 넘김 방식: 노드 `event`가 `para`/`page`/`auto`, 비어 있으면 독자 설정(기본 `para` = 클릭).
   auto일 때 줄 대기 `paraDelay×100`ms(기본 2초), 장 대기 `pageDelay×100`ms(기본 3초).
 - 글이 텍스트 상자 줄 수를 넘으면 상자를 비우고 이어서 출력.
