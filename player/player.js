@@ -387,14 +387,68 @@ const Player = (() => {
   }
 
   function submitInput(n, value) {
-    const steps = n.handler ?? [{ op: 'set', name: n.id }, { op: 'next' }];
     if (!n.handler) Log.warn(`입력창 ${n.id}에 연결된 onInput 처리가 없어 값만 저장하고 넘어감`);
+    runSteps(n.handler ?? [{ op: 'set', name: n.id }, { op: 'next' }], value);
+  }
+
+  // Runs the steps of a script handler (see UCN.parseScript).
+  function runSteps(steps, value) {
     for (const step of steps) {
       if (step.op === 'set') {
         vars[step.name] = value;
         Log.ok(`${idx + 1}장 입력: 변수 "${step.name}"에 ${[...value].length}자 저장`);
-      } else if (step.op === 'next') { next(); return; }
-      else if (step.op === 'prev') { go(idx - 1); return; }
+      } else if (step.op === 'next') { next(); return true; }
+      else if (step.op === 'prev') { go(idx - 1); return true; }
+    }
+    return false;
+  }
+
+  // ---- timers --------------------------------------------------------------------
+  // UCTimer: shows the seconds left (font size = half the box height, centred), ticks once a second,
+  // then runs the node's onTimerFinish handler from the work's script.
+  const timers = new Map(); // node id -> { el, interval }
+
+  function clearTimers() {
+    for (const t of timers.values()) { clearInterval(t.interval); t.el.remove(); }
+    timers.clear();
+  }
+
+  function renderTimers(pg) {
+    clearTimers();
+    for (const n of pg.timers) {
+      const st = n.style;
+      const el = document.createElement('div');
+      el.className = 'uc-timer';
+      const outline = rgba(st.outlinecolor, st.outlineAlpha / 100);
+      Object.assign(el.style, {
+        left: `${n.x}px`, top: `${n.y}px`, width: `${n.width}px`, height: `${n.height}px`,
+        fontSize: `${n.height / 2}px`, lineHeight: `${n.height}px`,
+        color: `#${(st.color || 'ffffff').padStart(6, '0')}`,
+        backgroundColor: rgba(st.background, st.opacity / 100),
+        border: st.border > 0 ? `1px solid #${(st.bordercolor || 'ffffff').padStart(6, '0')}` : 'none',
+        borderRadius: `${st.radius * 2}px`,
+        textShadow: `-1px -1px 0 ${outline}, 1px -1px 0 ${outline}, -1px 1px 0 ${outline}, 1px 1px 0 ${outline}`,
+        visibility: n.hidden ? 'hidden' : '',
+      });
+      let left = st.maxtime;
+      el.textContent = String(left);
+      $('stage').append(el);
+      const page = idx;
+      if (n.onStart) runSteps(n.onStart);
+      const t = { el, interval: setInterval(() => {
+        left -= 1;
+        el.textContent = String(Math.max(left, 0));
+        if (left > 0) return;
+        clearInterval(t.interval);
+        if (idx !== page) return;
+        Log.ok(`${idx + 1}장 타이머 ${st.maxtime}초 종료`);
+        if (n.onFinish?.length) { if (!runSteps(n.onFinish)) Log.info(`${idx + 1}장 타이머 종료 처리에 장 이동이 없음`); }
+        else if (story.pages[idx].advance.mode === 'input') {
+          Log.warn(`${idx + 1}장 타이머 ${n.id}에 연결된 onTimerFinish 처리가 없어 다음 장으로 넘어감`);
+          next();
+        }
+      }, 1000) };
+      timers.set(n.key, t);
     }
   }
 
@@ -435,6 +489,7 @@ const Player = (() => {
       renderBgm(pg);
       renderText(pg);
       renderInputs(pg);
+      renderTimers(pg);
     } catch (e) {
       // Something in this page broke the player: note it and carry on with the next page.
       Log.error(`${pg.page}장을 그리다 오류가 나서 다음 장으로 넘어감: ${e.message || e}`);
@@ -465,6 +520,7 @@ const Player = (() => {
 
   function showEnd() {
     clearTimeout(timer);
+    clearTimers();
     stopTyping();
     $('textbox').hidden = true;
     $('bgm').textContent = '';
@@ -501,6 +557,7 @@ const Player = (() => {
     live.clear();
     for (const el of inputs.values()) el.remove();
     inputs.clear();
+    clearTimers();
     go(0);
   }
 

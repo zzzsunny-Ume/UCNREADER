@@ -100,6 +100,13 @@
 - 스타일: 위치·크기·색·정렬·위아래 여백(`vPadding`)·좌우 여백(`hPadding`)·줄간격(`fontSize + leading`). 외곽선은 검정 1px 고정.
 - 글창: 원본 `UCScenario.setProperty`처럼 텍스트 노드 영역을 `background` 색, 불투명도 `opacity`/100으로 칠하고, `border`가 있으면 `bordercolor` 1px 테두리, 모서리는 `radius`×4 지름(CSS `radius`×2)으로 둥글게. 첫 표본은 `opacity=0`(투명, 대신 레터박스 이미지 사용), 둘째 표본은 `opacity=100`(검은 글창).
 
+## 타이머
+
+- 리소스: `<object type="image" advtype="timer" maxtime color outlinecolor outlineAlpha shadowcolor shadowAlpha background opacity radius border bordercolor>`. 그림 파일은 편집기용 자리표시라 표시하지 않음.
+- 표시(원본 `UCTimer`): 노드 영역 가운데에 남은 초를 글자 크기 = 영역 높이 ÷ 2로 표시. 글자색 `color`, 외곽선 `outlinecolor`·`outlineAlpha`, 배경 `background`·`opacity`, 둥근 모서리 `radius`×4 지름, 테두리.
+- 진행: `maxtime`초부터 1초마다 1씩 줄고, 끝나면 작품 스크립트의 `onTimerFinish[노드ID]`를 실행(시작할 때 `onTimerStart[노드ID]`). 처리 함수가 없고 그 장이 부품 대기 장이면 다음 장으로 넘김. 노드 `hidden="true"`면 숫자를 숨기고 시간만 셈.
+- 표본(셋째 작품): 4장 "HEART FOR BLUE" 화면에서 5초 카운트다운 → `gotoPageNext()`.
+
 ## 이름 입력창
 
 - 리소스: `<object type="image" advtype="input" background opacity border bordercolor radius btncolor btnbackground btnopacity>`. 그림 파일은 편집기용 자리표시라 표시하지 않음.
@@ -163,7 +170,8 @@
 | WARN | `장면(scene)이 N개 — 첫 장면만 재생` | |
 | WARN | `처리하지 않은 항목: … ×N` | 모르는 태그·레이어·컴포넌트, 범위 밖 장, 없는 리소스 참조 등 |
 | WARN | `지원하지 않는 부품 N개 — …: 버튼 부품 "…" (노드 …, A~B장)` | 입력창 외 부품(버튼·타이머·텍스트·그래프·스프라이트·동영상·애니메이션). 그림만 표시 |
-| ERR | `멈출 수 있는 장 N개 (…장): … 다음 장으로 넘어가도록 대체함` | `delay mode="click"`(부품 누르기 대기) 또는 지원하는 입력창이 없는 `mode="button"` 장. 글이 없으면 1초 뒤 자동으로, 글이 있으면 다 읽고 클릭하면 다음 장 |
+| ERR | `멈출 수 있는 장 N개 (…장): … 다음 장으로 넘어가도록 대체함` | 지원하는 부품(입력창·타이머)이 없는 `delay mode="button"` 장. 글이 없으면 1초 뒤 자동으로, 글이 있으면 다 읽고 클릭하면 다음 장 |
+| OK | `타이머 N장(5초), …` / `N장 타이머 5초 종료` | 타이머 위치와 종료 |
 | ERR | `N장을 그리다 오류가 나서 다음 장으로 넘어감: …` | 예기치 못한 오류. 기록 후 0.8초 뒤 다음 장 |
 | WARN | `N장: … 미지원 — 그림만 표시` / `N장: … 클릭으로 넘김` | 그 장에 들어갈 때 다시 알림 |
 | WARN | `처리하지 않은 항목: … (미반영) ×N` | 값이 기본값과 달라 화면에 영향을 주지만 아직 그리지 않는 속성: 모르는 효과 옵션, `white` 전환, 텍스트 그림자·배경 그림·그라데이션·외곽선 색, 텍스트 `event`(`para`/`page`/`auto`)·`type`, `invert`, 장 넘김의 `bgm`/`effect` 옵션, 처음 보는 리소스 종류. 기본값이면 경고하지 않음 |

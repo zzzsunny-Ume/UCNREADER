@@ -92,8 +92,9 @@ def build_story(root):
             p = num(el.get('page'))
             if p in pages:
                 # mode "scen": wait for the reader's click on the text;
-                # "button": wait for an input box; mode "": advance on its own after `time` ms.
-                if el.get('mode') == 'scen':
+                # "button": wait for an input box / timer; "click": a page without text waits for a tap;
+                # mode "": advance on its own after `time` ms.
+                if el.get('mode') in ('scen', 'click'):
                     pages[p]['advance'] = {'mode': 'click'}
                 elif el.get('mode') == 'button':
                     pages[p]['advance'] = {'mode': 'input'}
@@ -125,6 +126,14 @@ def build_story(root):
                         })
                     continue
                 start, end = num(n.get('start')), num(n.get('end'))
+                if kind == 'image' and resources.get(n.get('ref'), {}).get('advtype') == 'timer':
+                    # Countdown component; its picture is only a placeholder.
+                    maxtime = num(root.find(f"global/resource//object[@id='{n.get('ref')}']").get('maxtime'), 10)
+                    for p in range(max(start, 1), min(end, total) + 1):
+                        pages[p].setdefault('timers', []).append({
+                            'id': n.get('id'), 'seconds': maxtime, 'x': num(n.get('x')), 'y': num(n.get('y')),
+                            'width': num(n.get('width')), 'height': num(n.get('height'))})
+                    continue
                 if kind == 'image' and resources.get(n.get('ref'), {}).get('advtype') == 'input':
                     # Input box component (name entry etc.); its picture is only a placeholder.
                     for p in range(max(start, 1), min(end, total) + 1):

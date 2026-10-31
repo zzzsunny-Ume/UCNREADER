@@ -136,6 +136,14 @@ const UCN = (() => {
         advtype: at('advtype') || '',
         file: o.querySelector('file')?.getAttribute('name') ?? null,
       };
+      if (at('advtype') === 'timer') {
+        resources[at('id')].timer = {
+          maxtime: num(at('maxtime'), 10), color: at('color') || 'ffffff',
+          outlinecolor: at('outlinecolor') || '000000', outlineAlpha: num(at('outlineAlpha'), 100),
+          background: at('background'), opacity: num(at('opacity')), radius: num(at('radius')),
+          border: num(at('border')), bordercolor: at('bordercolor'),
+        };
+      }
       if (at('advtype') === 'input') {
         resources[at('id')].input = {
           background: at('background'), opacity: num(at('opacity')), border: num(at('border')),
@@ -161,7 +169,7 @@ const UCN = (() => {
     const total = num(scene.getAttribute('page'));
     Log.ok(`장면 "${scene.getAttribute('id')}": ${total}장`);
     const pages = [];
-    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], text: null, bgm: null, notes: [] });
+    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], timers: [], text: null, bgm: null, notes: [] });
 
     let order = 0;
     const components = [];
@@ -174,8 +182,10 @@ const UCN = (() => {
         const mode = el.getAttribute('mode');
         if (el.getAttribute('bgm') === 'true' || el.getAttribute('effect') === 'true') note('장 넘김의 bgm/effect 옵션 (미반영)');
         if (mode === 'scen') pg.advance = { mode: 'click' };
-        // "button" waits for an input box, "click" for a tap on a component (e.g. a heart button).
-        else if (mode === 'button' || mode === 'click') pg.advance = { mode: 'input', waitsFor: mode };
+        // "button": wait for the page's interactive component (input box, timer, …);
+        // "click": a page without text that waits for a tap (UCPlayer.loadPage).
+        else if (mode === 'button') pg.advance = { mode: 'input' };
+        else if (mode === 'click') pg.advance = { mode: 'click' };
         else {
           if (mode) note(`delay mode="${mode}" (자동 넘김으로 처리)`);
           pg.advance = { mode: 'auto', ms: num(el.getAttribute('time')) };
@@ -230,6 +240,15 @@ const UCN = (() => {
               handler: script.onInput[a('id')] ?? null,
             };
             for (let p = Math.max(start, 1); p <= Math.min(end, total); p++) pages[p - 1].inputs.push(item);
+            continue;
+          } else if (kind === 'image' && res?.advtype === 'timer') {
+            // Countdown component: draws the remaining seconds; its picture is the editor's placeholder.
+            item = {
+              key: a('id'), id: a('id'), ref, start, end, style: res.timer, hidden: a('hidden') === 'true',
+              x: num(a('x')), y: num(a('y')), width: num(a('width')), height: num(a('height')),
+              onStart: script.onTimerStart[a('id')] ?? null, onFinish: script.onTimerFinish[a('id')] ?? null,
+            };
+            for (let p = Math.max(start, 1); p <= Math.min(end, total); p++) pages[p - 1].timers.push(item);
             continue;
           } else if (kind === 'image' && res?.advtype) {
             // Another component (button, timer, …): not supported yet. Show its picture, say where it is.
@@ -287,13 +306,15 @@ const UCN = (() => {
     if (components.length) Log.warn(`지원하지 않는 부품 ${components.length}개 — 그 장에서 원래 동작(버튼 누르기, 시간 제한 등)을 하지 않음: ${components.join(', ')}`);
     // A page that waits for something we can't show (a button, a timer, …) would stop the story:
     // move on to the next page instead — on its own if there is nothing to read, else on a click.
-    const stuck = pages.filter((p) => p.advance.mode === 'input' && (p.advance.waitsFor === 'click' || !p.inputs.length));
+    const stuck = pages.filter((p) => p.advance.mode === 'input' && !p.inputs.length && !p.timers.length);
     for (const p of stuck) {
-      p.notes.push(`부품 입력을 기다리는 장(delay mode="${p.advance.waitsFor ?? 'button'}")이지만 지원하지 않아 다음 장으로 넘김`);
+      p.notes.push('부품 입력을 기다리는 장(delay mode="button")이지만 지원하는 부품이 없어 다음 장으로 넘김');
       p.advance = p.text ? { mode: 'click' } : { mode: 'auto', ms: 1000 };
     }
     if (stuck.length) Log.error(`멈출 수 있는 장 ${stuck.length}개 (${stuck.map((p) => `${p.page}장`).join(', ')}): 원래는 버튼·타이머 등 부품 입력을 기다리는 장 — 다음 장으로 넘어가도록 대체함`);
     const inputs = pages.reduce((n, p) => n + p.inputs.length, 0);
+    const timers = pages.filter((p) => p.timers.length);
+    if (timers.length) Log.ok(`타이머 ${timers.map((p) => `${p.page}장(${p.timers.map((t) => `${t.style.maxtime}초`).join(', ')})`).join(', ')}`);
     if (inputs) Log.ok(`입력창 ${inputs}개 (${pages.filter((p) => p.inputs.length).map((p) => `${p.page}장`).join(', ')})`);
     const autoPages = pages.filter((p) => p.advance.mode === 'auto').length;
     Log.ok(`타임라인 완성: 텍스트 ${pages.filter((p) => p.text).length}장, 자동 넘김 ${autoPages}장, BGM 구간 ${new Set(pages.map((p) => p.bgm?.key).filter(Boolean)).size}개`);
@@ -313,24 +334,25 @@ const UCN = (() => {
   // A small subset of UCscript, enough for name input: global variable declarations and
   // `void onInput[nodeId](string v) { 변수 = v; gotoPageNext(); }` handlers. Anything else is logged.
   function parseScript(src) {
-    const out = { vars: {}, onInput: {} };
+    const out = { vars: {}, onInput: {}, onTimerStart: {}, onTimerFinish: {}, onClick: {} };
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').trim();
     if (!code || /^;*$/.test(code)) return out;
     const NAME = '[^\\s;=(){}\\[\\],]+';
     const unsupported = [];
     const top = code.replace(new RegExp(`void\\s+(${NAME})(\\[[^\\]]*\\])?\\s*\\(([^)]*)\\)\\s*\\{([^{}]*)\\}`, 'g'), (all, fn, idx, params, body) => {
       const m = /^\[(\d+)\]$/.exec(idx || '');
-      const param = params.trim().split(/\s+/).pop();
-      if (fn !== 'onInput' || !m || !param) { unsupported.push(`함수 ${fn}${idx || ''}`); return ''; }
+      const param = params.trim() ? params.trim().split(/\s+/).pop() : '';
+      // Component events: onInput[id](string v), onTimerStart[id](), onTimerFinish[id](), onClick[id]().
+      if (!(fn in out) || fn === 'vars' || !m || (fn === 'onInput' && !param)) { unsupported.push(`함수 ${fn}${idx || ''}`); return ''; }
       const steps = [];
       for (const st of body.split(';').map((x) => x.trim()).filter(Boolean)) {
-        const set = new RegExp(`^(${NAME})\\s*=\\s*${param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).exec(st);
+        const set = param && new RegExp(`^(${NAME})\\s*=\\s*${param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).exec(st);
         if (set) steps.push({ op: 'set', name: set[1] });
         else if (/^gotoPageNext\(\s*\)$/.test(st)) steps.push({ op: 'next' });
         else if (/^gotoPagePrev\(\s*\)$/.test(st)) steps.push({ op: 'prev' });
         else unsupported.push(`문장 "${st.slice(0, 40)}"`);
       }
-      out.onInput[m[1]] = steps;
+      out[fn][m[1]] = steps;
       return '';
     });
     for (const st of top.split(';').map((x) => x.trim()).filter(Boolean)) {
@@ -338,7 +360,8 @@ const UCN = (() => {
       if (m) out.vars[m[2]] = m[3] ? m[3].trim().replace(/^"(.*)"$/, '$1') : '';
       else unsupported.push(`문장 "${st.slice(0, 40)}"`);
     }
-    Log.ok(`작품 스크립트: 변수 ${Object.keys(out.vars).length}개(${Object.keys(out.vars).join(', ') || '-'}), 입력 처리 ${Object.keys(out.onInput).length}개`);
+    const events = ['onInput', 'onTimerStart', 'onTimerFinish', 'onClick'].map((k) => [k, Object.keys(out[k]).length]).filter(([, n]) => n);
+    Log.ok(`작품 스크립트: 변수 ${Object.keys(out.vars).length}개(${Object.keys(out.vars).join(', ') || '-'}), 처리 함수 ${events.map(([k, n]) => `${k} ${n}개`).join(', ') || '없음'}`);
     if (unsupported.length) Log.warn(`작품 스크립트 중 지원하지 않는 부분 ${unsupported.length}개 — 동작하지 않음: ${unsupported.slice(0, 12).join(', ')}${unsupported.length > 12 ? ` 외 ${unsupported.length - 12}개` : ''}`);
     return out;
   }
