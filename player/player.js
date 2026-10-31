@@ -435,6 +435,7 @@ const Player = (() => {
     renderText(pg);
     renderInputs(pg);
     const imgs = pg.images.map((m) => m.ref).join(', ');
+    for (const msg of pg.notes) Log.warn(`${pg.page}장: ${msg}`);
     Log.info(`${pg.page}장: 배경 ${pg.background?.ref ?? '-'} / 이미지 ${imgs || '-'} / BGM ${pg.bgm?.ref ?? '-'} / ${{ auto: `자동 ${pg.advance.ms}ms`, input: '입력 대기' }[pg.advance.mode] ?? '클릭'}`);
     if (!pg.text && pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
   }

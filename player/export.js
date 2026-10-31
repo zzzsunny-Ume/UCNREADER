@@ -91,8 +91,9 @@ const Export = (() => {
     Log.ok(`글 ${count}장 txt 저장`);
   }
 
-  function log(title) {
-    save(new Blob(['﻿' + Log.text().replace(/\n/g, '\r\n')], { type: 'text/plain;charset=utf-8' }), `${title}_log.txt`);
+  function log(title, levels) {
+    const name = levels ? `${title}_log_경고오류.txt` : `${title}_log.txt`;
+    save(new Blob(['﻿' + Log.text(levels).replace(/\n/g, '\r\n')], { type: 'text/plain;charset=utf-8' }), name);
   }
 
   return { images, texts, log };

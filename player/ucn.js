@@ -3,6 +3,7 @@
 // Every step reports to Log so readers can send the log when a file fails.
 const UCN = (() => {
   const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
+  const COMPONENT = { button: '버튼', timer: '타이머', text: '텍스트', graph: '그래프', sprite: '스프라이트', video: '동영상', animation: '애니메이션' };
   const KNOWN_LAYERS = new Set(['scenario', 'back', 'bgm', 'image', 'effect', 'group']);
 
   const CRC_TABLE = (() => {
@@ -135,7 +136,6 @@ const UCN = (() => {
         advtype: at('advtype') || '',
         file: o.querySelector('file')?.getAttribute('name') ?? null,
       };
-      if (at('advtype') && at('advtype') !== 'input') note(`리소스 종류 advtype="${at('advtype')}" (미지원)`);
       if (at('advtype') === 'input') {
         resources[at('id')].input = {
           background: at('background'), opacity: num(at('opacity')), border: num(at('border')),
@@ -161,9 +161,10 @@ const UCN = (() => {
     const total = num(scene.getAttribute('page'));
     Log.ok(`장면 "${scene.getAttribute('id')}": ${total}장`);
     const pages = [];
-    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], text: null, bgm: null });
+    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], text: null, bgm: null, notes: [] });
 
     let order = 0;
+    const components = [];
     for (const el of scene.children) {
       if (el.tagName === 'delay') {
         const pg = pages[num(el.getAttribute('page')) - 1];
@@ -229,6 +230,16 @@ const UCN = (() => {
             };
             for (let p = Math.max(start, 1); p <= Math.min(end, total); p++) pages[p - 1].inputs.push(item);
             continue;
+          } else if (kind === 'image' && res?.advtype) {
+            // Another component (button, timer, …): not supported yet. Show its picture, say where it is.
+            const label = `${COMPONENT[res.advtype] || res.advtype} 부품 "${ref}"`;
+            components.push(`${label} (노드 ${a('id')}, ${start}~${end}장)`);
+            for (let p = Math.max(start, 1); p <= Math.min(end, total); p++) pages[p - 1].notes.push(`${label} 미지원 — 그림만 표시`);
+            item = {
+              key: a('id') || `n${order}`, ref, file: res.file && base(res.file), start, end,
+              x: num(a('x')), y: num(a('y')), width: num(a('width')), height: num(a('height')),
+              z: num(a('z')), order, effects: effects(n),
+            };
           } else if (kind === 'back' || kind === 'image') {
             if (a('hidden') === 'true') continue;
             if (a('invert') === 'true') note('이미지 invert (미반영)');
@@ -272,6 +283,14 @@ const UCN = (() => {
       } else if (!['#w;', '#c;', '#d;'].includes(k)) Log.warn(`태그 ${k} — 스크립트 호출이라 무시됨`);
     }
 
+    if (components.length) Log.warn(`지원하지 않는 부품 ${components.length}개 — 그 장에서 원래 동작(버튼 누르기, 시간 제한 등)을 하지 않음: ${components.join(', ')}`);
+    // A page that waits for an input box we can't show would stop the story: let a click move on instead.
+    const stuck = pages.filter((p) => p.advance.mode === 'input' && !p.inputs.length);
+    for (const p of stuck) {
+      p.advance = { mode: 'click' };
+      p.notes.push('입력·버튼을 기다리는 장이지만 지원하는 입력창이 없어 클릭으로 넘김');
+    }
+    if (stuck.length) Log.error(`멈출 수 있는 장 ${stuck.length}개 (${stuck.map((p) => `${p.page}장`).join(', ')}): 원래는 버튼·입력을 기다리는 장 — 클릭하면 넘어가도록 대체함`);
     const inputs = pages.reduce((n, p) => n + p.inputs.length, 0);
     if (inputs) Log.ok(`입력창 ${inputs}개 (${pages.filter((p) => p.inputs.length).map((p) => `${p.page}장`).join(', ')})`);
     const autoPages = pages.filter((p) => p.advance.mode === 'auto').length;
@@ -318,7 +337,7 @@ const UCN = (() => {
       else unsupported.push(`문장 "${st.slice(0, 40)}"`);
     }
     Log.ok(`작품 스크립트: 변수 ${Object.keys(out.vars).length}개(${Object.keys(out.vars).join(', ') || '-'}), 입력 처리 ${Object.keys(out.onInput).length}개`);
-    if (unsupported.length) Log.warn(`작품 스크립트 중 지원하지 않는 부분 ${unsupported.length}개 — 동작하지 않음: ${unsupported.slice(0, 5).join(', ')}${unsupported.length > 5 ? ' …' : ''}`);
+    if (unsupported.length) Log.warn(`작품 스크립트 중 지원하지 않는 부분 ${unsupported.length}개 — 동작하지 않음: ${unsupported.slice(0, 12).join(', ')}${unsupported.length > 12 ? ` 외 ${unsupported.length - 12}개` : ''}`);
     return out;
   }
 

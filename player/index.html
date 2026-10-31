@@ -126,6 +126,11 @@
   #loglines .ok { color: #8fc79a; }
   #loglines .warn { color: #e2b35c; }
   #loglines .error { color: #f08a7c; font-weight: 700; }
+  #loglines.problems .info, #loglines.problems .ok { display: none; }
+  #loglines .empty { color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  #logpanel .seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 12px; }
+  #logpanel .seg button[aria-pressed="true"] { background: var(--line); color: #fff; }
 </style>
 </head>
 <body class="picking">
@@ -181,9 +186,13 @@
   <section id="logpanel" hidden aria-label="로그">
     <header>
       <strong>로그</strong>
+      <span class="seg" role="group" aria-label="보기">
+        <button id="l-all" type="button" aria-pressed="true">전체</button>
+        <button id="l-prob" type="button" aria-pressed="false">경고·오류 <span id="l-probn"></span></button>
+      </span>
       <span class="sum" id="logsum"></span>
       <button id="l-copy" type="button">복사</button>
-      <button id="l-save" type="button">로그 저장</button>
+      <button id="l-save" type="button">저장</button>
       <button id="l-close" type="button">닫기</button>
     </header>
     <pre id="loglines"></pre>
@@ -201,6 +210,9 @@
   let loaded = null, title = 'ucn';
 
   // ---- log panel ----
+  // "경고·오류" view: copy and save then cover only those lines.
+  let onlyProblems = false;
+  const PROBLEMS = ['warn', 'error'];
   function renderLine(e) {
     const box = $('loglines');
     const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
@@ -212,6 +224,8 @@
     const c = Log.counts;
     $('t-err').textContent = c.error || '';
     $('logsum').textContent = `성공 ${c.ok} · 정보 ${c.info} · 경고 ${c.warn} · 오류 ${c.error}`;
+    $('l-probn').textContent = c.warn + c.error;
+    showEmptyNote();
   }
   Log.entries.forEach(renderLine);
   Log.onAdd(renderLine);
@@ -229,10 +243,42 @@
     toggleLog(true);
   });
   $('l-close').addEventListener('click', () => toggleLog(false));
-  $('l-save').addEventListener('click', () => Export.log(title));
+  function showEmptyNote() {
+    const box = $('loglines');
+    box.querySelector('.empty')?.remove();
+    if (onlyProblems && !(Log.counts.warn + Log.counts.error)) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      div.textContent = '경고나 오류가 없습니다.';
+      box.prepend(div);
+    }
+  }
+  function setFilter(problems) {
+    onlyProblems = problems;
+    $('loglines').classList.toggle('problems', problems);
+    $('l-all').setAttribute('aria-pressed', String(!problems));
+    $('l-prob').setAttribute('aria-pressed', String(problems));
+    showEmptyNote();
+    $('loglines').scrollTop = $('loglines').scrollHeight;
+  }
+  $('l-all').addEventListener('click', () => setFilter(false));
+  $('l-prob').addEventListener('click', () => setFilter(true));
+  $('l-save').addEventListener('click', () => Export.log(title, onlyProblems ? PROBLEMS : undefined));
   $('l-copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(Log.text()); $('l-copy').textContent = '복사됨'; }
-    catch { $('l-copy').textContent = '복사 실패'; }
+    const text = Log.text(onlyProblems ? PROBLEMS : undefined) || '경고나 오류가 없습니다.';
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch {
+      // Older or non-secure pages: fall back to a hidden textarea.
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.append(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      ta.remove();
+    }
+    $('l-copy').textContent = ok ? (onlyProblems ? '경고·오류 복사됨' : '복사됨') : '복사 실패';
     setTimeout(() => { $('l-copy').textContent = '복사'; }, 1500);
   });
   $('t-img').addEventListener('click', () => loaded && Export.images(loaded, title));

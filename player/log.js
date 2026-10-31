@@ -24,7 +24,8 @@ const Log = (() => {
     entries,
     counts,
     line,
-    text: () => entries.map(line).join('\n'),
+    // levels: optional list, e.g. ['warn', 'error'] for problems only.
+    text: (levels) => entries.filter((e) => !levels || levels.includes(e.level)).map(line).join('\n'),
   };
 })();
 
