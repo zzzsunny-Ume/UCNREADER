@@ -430,10 +430,17 @@ const Player = (() => {
     if (i >= story.pages.length) { Log.ok('마지막 장까지 재생 완료'); showEnd(); return; }
     idx = i;
     const pg = story.pages[i];
-    renderLayers(pg);
-    renderBgm(pg);
-    renderText(pg);
-    renderInputs(pg);
+    try {
+      renderLayers(pg);
+      renderBgm(pg);
+      renderText(pg);
+      renderInputs(pg);
+    } catch (e) {
+      // Something in this page broke the player: note it and carry on with the next page.
+      Log.error(`${pg.page}장을 그리다 오류가 나서 다음 장으로 넘어감: ${e.message || e}`);
+      timer = setTimeout(next, 800);
+      return;
+    }
     const imgs = pg.images.map((m) => m.ref).join(', ');
     for (const msg of pg.notes) Log.warn(`${pg.page}장: ${msg}`);
     Log.info(`${pg.page}장: 배경 ${pg.background?.ref ?? '-'} / 이미지 ${imgs || '-'} / BGM ${pg.bgm?.ref ?? '-'} / ${{ auto: `자동 ${pg.advance.ms}ms`, input: '입력 대기' }[pg.advance.mode] ?? '클릭'}`);

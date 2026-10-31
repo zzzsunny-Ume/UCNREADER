@@ -174,7 +174,8 @@ const UCN = (() => {
         const mode = el.getAttribute('mode');
         if (el.getAttribute('bgm') === 'true' || el.getAttribute('effect') === 'true') note('장 넘김의 bgm/effect 옵션 (미반영)');
         if (mode === 'scen') pg.advance = { mode: 'click' };
-        else if (mode === 'button') pg.advance = { mode: 'input' };
+        // "button" waits for an input box, "click" for a tap on a component (e.g. a heart button).
+        else if (mode === 'button' || mode === 'click') pg.advance = { mode: 'input', waitsFor: mode };
         else {
           if (mode) note(`delay mode="${mode}" (자동 넘김으로 처리)`);
           pg.advance = { mode: 'auto', ms: num(el.getAttribute('time')) };
@@ -284,13 +285,14 @@ const UCN = (() => {
     }
 
     if (components.length) Log.warn(`지원하지 않는 부품 ${components.length}개 — 그 장에서 원래 동작(버튼 누르기, 시간 제한 등)을 하지 않음: ${components.join(', ')}`);
-    // A page that waits for an input box we can't show would stop the story: let a click move on instead.
-    const stuck = pages.filter((p) => p.advance.mode === 'input' && !p.inputs.length);
+    // A page that waits for something we can't show (a button, a timer, …) would stop the story:
+    // move on to the next page instead — on its own if there is nothing to read, else on a click.
+    const stuck = pages.filter((p) => p.advance.mode === 'input' && (p.advance.waitsFor === 'click' || !p.inputs.length));
     for (const p of stuck) {
-      p.advance = { mode: 'click' };
-      p.notes.push('입력·버튼을 기다리는 장이지만 지원하는 입력창이 없어 클릭으로 넘김');
+      p.notes.push(`부품 입력을 기다리는 장(delay mode="${p.advance.waitsFor ?? 'button'}")이지만 지원하지 않아 다음 장으로 넘김`);
+      p.advance = p.text ? { mode: 'click' } : { mode: 'auto', ms: 1000 };
     }
-    if (stuck.length) Log.error(`멈출 수 있는 장 ${stuck.length}개 (${stuck.map((p) => `${p.page}장`).join(', ')}): 원래는 버튼·입력을 기다리는 장 — 클릭하면 넘어가도록 대체함`);
+    if (stuck.length) Log.error(`멈출 수 있는 장 ${stuck.length}개 (${stuck.map((p) => `${p.page}장`).join(', ')}): 원래는 버튼·타이머 등 부품 입력을 기다리는 장 — 다음 장으로 넘어가도록 대체함`);
     const inputs = pages.reduce((n, p) => n + p.inputs.length, 0);
     if (inputs) Log.ok(`입력창 ${inputs}개 (${pages.filter((p) => p.inputs.length).map((p) => `${p.page}장`).join(', ')})`);
     const autoPages = pages.filter((p) => p.advance.mode === 'auto').length;

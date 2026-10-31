@@ -64,6 +64,8 @@
   .linkish { font: inherit; color: var(--fg); background: none; border: 0; padding: 0;
     text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   body.picking #tools { display: none; }
+  /* With the log open, keep only its close button so the tools don't cover the log lines. */
+  body.log-open #tools button:not(#t-log) { display: none; }
   /* Phone turned sideways: keep the whole screen for the story. Rotate back to portrait for the tools. */
   @media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
     body:not(.log-open) #tools { display: none; }
