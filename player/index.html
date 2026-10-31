@@ -60,6 +60,13 @@
   .features span { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
   @media (max-width: 520px) { .features { grid-template-columns: 1fr; } }
 
+  .notice { width: min(560px, 100%); margin-top: 18px; padding: 16px 18px; border-radius: 14px;
+    border: 1px solid rgba(201,185,154,.55); background: rgba(201,185,154,.10); line-height: 1.65; font-size: 14px; }
+  .notice strong { display: block; margin-bottom: 6px; color: var(--accent); font-size: 15px; }
+  .notice p { margin: 0; }
+  .notice .mail { display: inline-block; margin-top: 10px; padding: 7px 14px; border-radius: 999px;
+    background: var(--accent); color: #19160f; font-weight: 700; text-decoration: none; }
+  #status.error .hint-file { display: block; margin-top: 6px; color: var(--fg); }
   .foot { margin-top: auto; padding-top: 36px; color: var(--muted); font-size: 12px; text-align: center; line-height: 1.7; }
   .linkish { font: inherit; color: var(--fg); background: none; border: 0; padding: 0;
     text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
@@ -163,10 +170,17 @@
       <li><b>글 저장</b><span>대사와 서술을 장 순서대로 txt로</span></li>
     </ul>
 
+    <section class="notice" aria-label="오류 제보 안내">
+      <strong>오류가 생기면 .ucn 파일을 보내 주세요</strong>
+      <p>가장 확실한 해결 방법은 문제가 생긴 <b>.ucn 파일</b>을 보내 주시는 것입니다.
+        받은 파일은 <b>문제를 해결한 뒤 바로 삭제</b>합니다.
+        파일이 크면 <b>압축해서 메일로</b> 보내 주시면 빠르게 처리하겠습니다.</p>
+      <a class="mail" href="mailto:jisun645028@gmail.com?subject=%5BUCN%20Reader%5D%20%EC%98%A4%EB%A5%98%20%EC%A0%9C%EB%B3%B4">jisun645028@gmail.com</a>
+    </section>
+
     <p class="foot">
       파일은 업로드되지 않고 이 브라우저 안에서만 열립니다.<br>
-      잘 안 열리면 <button class="linkish" type="button" data-open-log>Log 보기</button>에서 로그를 저장해 보내주세요.<br>
-      문의 · 제보 <a class="linkish" href="mailto:jisun645028@gmail.com">jisun645028@gmail.com</a>
+      함께 보내 주시면 좋은 것: <button class="linkish" type="button" data-open-log>Log 보기</button> → 경고·오류 → 복사한 내용
     </p>
   </main>
 
@@ -309,7 +323,8 @@
     } catch (e) {
       Log.error(`불러오기 실패: ${e.message || e}`);
       status.className = 'error';
-      status.innerHTML = '<b>파일을 열지 못했습니다.</b><br><span></span><br><button class="linkish" type="button" data-open-log>Log 보기</button>';
+      status.innerHTML = '<b>파일을 열지 못했습니다.</b><br><span></span><br><button class="linkish" type="button" data-open-log>Log 보기</button>'
+        + '<b class="hint-file">이 .ucn 파일을 jisun645028@gmail.com 으로 보내 주시면 빠르게 해결하겠습니다. (크면 압축해서, 해결 후 바로 삭제)</b>';
       status.querySelector('span').textContent = e.message || String(e);
     }
   }
