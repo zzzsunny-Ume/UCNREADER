@@ -87,9 +87,8 @@
   #layers { inset: 0; }
   .layer { display: block; object-fit: fill; pointer-events: none; }
   #textbox { position: absolute; z-index: 1000; white-space: pre-wrap; word-break: keep-all;
-    overflow-wrap: anywhere;
-    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
-                 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000; }
+    overflow-wrap: anywhere; }
+  /* No outline or shadow: the original player stores outlinecolor/shadowcolor but never draws them. */
   #textbox .ghost { visibility: hidden; }
   .white-sheet { background: #fff; pointer-events: none; }
   /* Input box (UCInput): entry field near the top, button near the bottom of the node's box. */

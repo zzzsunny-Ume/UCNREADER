@@ -205,10 +205,8 @@ const UCN = (() => {
             if (!(a('ref') in texts)) note(`없는 텍스트 ref="${a('ref')}"`);
             if (pg.text) note('한 장에 텍스트 2개 이상 (마지막 것만 표시)');
             // Text attributes the player doesn't draw yet: flag them when they differ from the defaults.
-            if (num(a('shadowAlpha')) > 0) note('텍스트 그림자 shadowAlpha (미반영)');
             if (a('backgroundimage')) note('글창 배경 그림 backgroundimage (미반영)');
             if (num(a('gRotation')) || num(a('gHeight'))) note('텍스트 그라데이션 gRotation/gHeight (미반영)');
-            if ((a('outlinecolor') || '0') !== '0' || num(a('outlineAlpha'), 100) !== 100) note('텍스트 외곽선 색·투명도 (검정 1px로 표시)');
             if (['para', 'page', 'auto'].includes(a('event'))) note(`텍스트 넘김 방식 event="${a('event')}" (미반영)`);
             if (a('type')) note(`텍스트 type="${a('type')}" (미반영)`);
             if (a('invert') === 'true') note('텍스트 invert (미반영)');

@@ -97,13 +97,13 @@
 - 클릭할 때: 출력 중이면 다음 대기 지점까지 즉시 출력 → 대기 중이면 이어서 출력 → 다 나왔으면 다음 장.
 - 줄 배치: 원본처럼 **줄 전체로 자리를 먼저 잡고** 그 자리에서 앞부분부터 드러냅니다. 아직 안 나온 같은 줄의 나머지(`#w;` 뒤 글자 등)는 투명한 글자로 미리 배치해, 가운데 정렬에서도 이미 나온 글자가 옆으로 밀리지 않습니다.
 - 텍스트 상자가 넘치면(원본의 최대 줄 수 도달) 현재 줄만 남기고 비운 뒤 이어서 출력합니다. 원본은 줄 수로 판단하고, 웹은 실제 높이 넘침으로 판단합니다.
-- 스타일: 위치·크기·색·정렬·위아래 여백(`vPadding`)·좌우 여백(`hPadding`)·줄간격(`fontSize + leading`). 외곽선은 검정 1px 고정.
+- 스타일: 위치·크기·색·정렬·위아래 여백(`vPadding`)·좌우 여백(`hPadding`)·줄간격(`fontSize + leading`). 외곽선(`outlinecolor`·`outlineAlpha`)과 그림자(`shadowcolor`·`shadowAlpha`)는 원본 앱이 값을 읽기만 하고 그리지 않으므로 그리지 않음(예전 버전은 검정 1px 외곽선을 그려 어두운 글자가 번져 보였음).
 - 글창: 원본 `UCScenario.setProperty`처럼 텍스트 노드 영역을 `background` 색, 불투명도 `opacity`/100으로 칠하고, `border`가 있으면 `bordercolor` 1px 테두리, 모서리는 `radius`×4 지름(CSS `radius`×2)으로 둥글게. 첫 표본은 `opacity=0`(투명, 대신 레터박스 이미지 사용), 둘째 표본은 `opacity=100`(검은 글창).
 
 ## 타이머
 
 - 리소스: `<object type="image" advtype="timer" maxtime color outlinecolor outlineAlpha shadowcolor shadowAlpha background opacity radius border bordercolor>`. 그림 파일은 편집기용 자리표시라 표시하지 않음.
-- 표시(원본 `UCTimer`): 노드 영역 가운데에 남은 초를 글자 크기 = 영역 높이 ÷ 2로 표시. 글자색 `color`, 외곽선 `outlinecolor`·`outlineAlpha`, 배경 `background`·`opacity`, 둥근 모서리 `radius`×4 지름, 테두리.
+- 표시(원본 `UCTimer`): 노드 영역 가운데에 남은 초를 글자 크기 = 영역 높이 ÷ 2로 표시. 글자색 `color`(외곽선은 그리지 않음), 배경 `background`·`opacity`, 둥근 모서리 `radius`×4 지름, 테두리.
 - 진행: `maxtime`초부터 1초마다 1씩 줄고, 끝나면 작품 스크립트의 `onTimerFinish[노드ID]`를 실행(시작할 때 `onTimerStart[노드ID]`). 처리 함수가 없고 그 장이 부품 대기 장이면 다음 장으로 넘김. 노드 `hidden="true"`면 숫자를 숨기고 시간만 셈.
 - 표본(셋째 작품): 4장 "HEART FOR BLUE" 화면에서 5초 카운트다운 → `gotoPageNext()`.
 
@@ -174,7 +174,7 @@
 | OK | `타이머 N장(5초), …` / `N장 타이머 5초 종료` | 타이머 위치와 종료 |
 | ERR | `N장을 그리다 오류가 나서 다음 장으로 넘어감: …` | 예기치 못한 오류. 기록 후 0.8초 뒤 다음 장 |
 | WARN | `N장: … 미지원 — 그림만 표시` / `N장: … 클릭으로 넘김` | 그 장에 들어갈 때 다시 알림 |
-| WARN | `처리하지 않은 항목: … (미반영) ×N` | 값이 기본값과 달라 화면에 영향을 주지만 아직 그리지 않는 속성: 모르는 효과 옵션, `white` 전환, 텍스트 그림자·배경 그림·그라데이션·외곽선 색, 텍스트 `event`(`para`/`page`/`auto`)·`type`, `invert`, 장 넘김의 `bgm`/`effect` 옵션, 처음 보는 리소스 종류. 기본값이면 경고하지 않음 |
+| WARN | `처리하지 않은 항목: … (미반영) ×N` | 값이 기본값과 달라 화면에 영향을 주지만 아직 그리지 않는 속성: 모르는 효과 옵션, `white` 전환, 텍스트 배경 그림·그라데이션, 텍스트 `event`(`para`/`page`/`auto`)·`type`, `invert`, 장 넘김의 `bgm`/`effect` 옵션, 처음 보는 리소스 종류. 기본값이면 경고하지 않음 |
 | INFO | `텍스트 태그 사용: #w;×12, …` | 쓰인 태그 통계 |
 | WARN | `변수 $…; 사용 — 빈칸으로 표시됨` / `태그 #…; — 스크립트 호출이라 무시됨` | |
 | OK | `타임라인 완성: …` | |

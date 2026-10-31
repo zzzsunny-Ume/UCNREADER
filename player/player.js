@@ -419,7 +419,6 @@ const Player = (() => {
       const st = n.style;
       const el = document.createElement('div');
       el.className = 'uc-timer';
-      const outline = rgba(st.outlinecolor, st.outlineAlpha / 100);
       Object.assign(el.style, {
         left: `${n.x}px`, top: `${n.y}px`, width: `${n.width}px`, height: `${n.height}px`,
         fontSize: `${n.height / 2}px`, lineHeight: `${n.height}px`,
@@ -427,7 +426,6 @@ const Player = (() => {
         backgroundColor: rgba(st.background, st.opacity / 100),
         border: st.border > 0 ? `1px solid #${(st.bordercolor || 'ffffff').padStart(6, '0')}` : 'none',
         borderRadius: `${st.radius * 2}px`,
-        textShadow: `-1px -1px 0 ${outline}, 1px -1px 0 ${outline}, -1px 1px 0 ${outline}, 1px 1px 0 ${outline}`,
         visibility: n.hidden ? 'hidden' : '',
       });
       let left = st.maxtime;
