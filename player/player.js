@@ -415,6 +415,7 @@ const Player = (() => {
       field.setAttribute('aria-label', '입력');
       const first = n.handler?.find((x) => x.op === 'set');
       if (first && vars[first.name]) field.value = vars[first.name];
+      else if (n.initial) field.value = n.initial;
       const btn = document.createElement('button');
       btn.type = 'submit';
       btn.textContent = '확인';
@@ -422,6 +423,12 @@ const Player = (() => {
         backgroundColor: rgba(st.btnbackground || 'ffffff', (st.btnopacity ?? 0) / 100),
         color: `#${(st.btncolor || 'ffffff').padStart(6, '0')}`,
       });
+      if (n.title) {
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = n.title;
+        box.append(title);
+      }
       box.append(field, btn);
       // Keep taps and keys inside the box from turning the page.
       for (const ev of ['click', 'pointerdown', 'keydown']) box.addEventListener(ev, (e) => e.stopPropagation());
@@ -547,6 +554,7 @@ const Player = (() => {
     }
     const imgs = pg.images.map((m) => m.ref).join(', ');
     for (const msg of pg.notes) Log.warn(`${pg.page}장: ${msg}`);
+    for (const msg of pg.infos ?? []) Log.info(`${pg.page}장: ${msg}`);
     Log.info(`${pg.page}장: 배경 ${pg.background?.ref ?? '-'} / 이미지 ${imgs || '-'} / BGM ${pg.bgm?.ref ?? '-'} / ${{ auto: `자동 ${pg.advance.ms}ms`, input: '입력 대기' }[pg.advance.mode] ?? '클릭'}`);
     if (!pg.text && pg.advance.mode === 'auto') timer = setTimeout(next, pg.advance.ms);
   }

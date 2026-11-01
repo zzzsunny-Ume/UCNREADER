@@ -403,6 +403,73 @@ const UCN = (() => {
     return entries;
   }
 
+  // Everything seen in the old-format samples (Onpair p.01–03). Anything else is logged with its pages,
+  // because how the old studio meant it is unknown: key = "parent>tag", a = attributes, c = children,
+  // v = known values per attribute. Effect names also accept every mask transition.
+  const OLD_EFFECTS = ['fade', 'none', 'reserved'];
+  const OLD_SCHEMA = {
+    'ucscript': { c: ['global', 'folder', 'object', 'character', 'scene'] },
+    'ucscript>global': { c: ['font', 'color', 'option', 'var'] },
+    'global>font': { c: ['node'] }, 'font>node': { a: ['id', 'size', 'name'] },
+    'global>color': { c: ['node'] }, 'color>node': { a: ['id', 'color'] },
+    'global>option': { c: ['text'] }, 'option>text': { a: ['event', 'speed'] },
+    'global>var': { c: ['node'] }, 'var>node': { a: ['name', 'type', 'data'], v: { type: ['timer', 'string'] } },
+    'ucscript>folder': { c: ['node'] }, 'folder>node': { a: ['name'] },
+    'ucscript>object': { c: ['node'] },
+    // ex="input"/"timer" objects (folder 고급자원) are components with bgcolor/alpha/color/title/text/time.
+    'object>node': { a: ['name', 'type', 'category', 'folder', 'pack', 'play', 'width', 'height', 'frame', 'page', 'ex', 'bgcolor', 'alpha', 'color', 'title', 'text', 'time'], c: ['frame'],
+      v: { type: ['image', 'sound'], category: ['bg', 'image', 'bgm'], frame: ['1'], play: ['0'], page: ['1'], ex: ['0', 'input', 'timer'], pack: ['user'] } },
+    'node>frame': { a: ['type', 'load', 'play', 'delay'], v: { type: ['single'], play: ['0'], delay: ['1'] } },
+    'ucscript>character': { a: ['skin', 'ix', 'iy', 'idx', 'idy', 'nx', 'ny', 'ndx', 'ndy', 'nalign'] },
+    'ucscript>scene': { c: ['node'] }, 'scene>node': { a: ['name'], c: ['layer', 'inst'] },
+    'node>layer': { c: ['layer'] }, 'layer>layer': { a: ['name', 'object'] },
+    'node>inst': { c: ['global', 'page'] }, 'inst>global': {},
+    'inst>page': { a: ['id'], c: ['bgm', 'sound', 'background', 'image', 'content'] },
+    'page>bgm': { a: ['name', 'count'] }, 'page>sound': { a: ['name'] },
+    'page>background': { a: ['fadein', 'fadeout', 'name', 'time'], v: { fadein: 'effect', fadeout: 'effect' } },
+    'page>image': { a: ['name', 'fadein', 'fadeout', 'time', 'x', 'y', 'width', 'height', 'multi', 'type'], c: ['button'],
+      v: { type: ['', 'input', 'timer'], multi: ['0'], fadein: 'effect', fadeout: 'effect' } },
+    'image>button': { c: ['goto', 'var'] }, 'button>goto': { a: ['scene', 'page'], v: { scene: ['다음 쪽', '이전 쪽'], page: ['1'] } },
+    'button>var': { a: ['name'] },
+    'page>content': { a: ['multi', 'x', 'y', 'width', 'height', 'line', 'align', 'alpha', 'color', 'head', 'speed', 'event'], c: ['text'],
+      v: { multi: ['0'], align: ['center', 'left', 'right'], head: ['0'], event: ['2'] } },
+    'content>text': { a: ['data'] },
+  };
+
+  function checkOldSchema(doc) {
+    const seen = new Map(); // message -> Set of page numbers (0 = outside pages)
+    const add = (msg, page) => { if (!seen.has(msg)) seen.set(msg, new Set()); seen.get(msg).add(page); };
+    const known = (val, rule) => rule === 'effect'
+      ? OLD_EFFECTS.includes(val) || (typeof UC_MASKS !== 'undefined' && val in UC_MASKS)
+      : rule.includes(val);
+    // owner: the named object/layer the element belongs to, so global findings say where they are.
+    const walk = (el, parentTag, page, owner) => {
+      const key = parentTag ? `${parentTag}>${el.tagName}` : el.tagName;
+      const spec = OLD_SCHEMA[key];
+      if (el.tagName === 'page') page = num(el.getAttribute('id'), -1) + 1;
+      if (!page && el.getAttribute('name')) owner = `${parentTag || el.tagName} "${el.getAttribute('name')}"`;
+      const at = owner && !page ? ` [${owner}]` : '';
+      if (!spec) { add(`처음 보는 요소 <${parentTag}>/<${el.tagName}> (속성: ${[...el.attributes].map((x) => `${x.name}="${x.value.slice(0, 20)}"`).join(' ') || '없음'})${at}`, page); return; }
+      for (const a of el.attributes) {
+        if (!(spec.a || []).includes(a.name)) add(`처음 보는 속성 <${el.tagName} ${a.name}="${a.value.slice(0, 30)}">${at}`, page);
+        else if (spec.v?.[a.name] && !known(a.value, spec.v[a.name])) add(`처음 보는 값 <${el.tagName} ${a.name}="${a.value.slice(0, 30)}">${at}`, page);
+      }
+      for (const c of el.children) {
+        if (!(spec.c || []).includes(c.tagName) && OLD_SCHEMA[`${el.tagName}>${c.tagName}`] === undefined) {
+          add(`처음 보는 요소 <${el.tagName}>/<${c.tagName}> (속성: ${[...c.attributes].map((x) => `${x.name}="${x.value.slice(0, 20)}"`).join(' ') || '없음'})${at}`, page);
+        } else walk(c, el.tagName, page, owner);
+      }
+    };
+    walk(doc.documentElement, '', 0, '');
+    if (!seen.size) { Log.ok('옛 형식 구조 검사: 모든 요소·속성·값이 알려진 형식'); return; }
+    Log.warn(`옛 형식 구조 검사: 처음 보는 항목 ${seen.size}종 — 원래 어떻게 보였는지 몰라 무시하거나 추정으로 처리함. 아래 목록을 제보해 주세요`);
+    for (const [msg, pages] of seen) {
+      const ps = [...pages].filter((p) => p > 0).sort((a, b) => a - b);
+      const where = ps.length ? `${ps.length}개 장: ${ps.slice(0, 12).map((p) => `${p}장`).join(', ')}${ps.length > 12 ? ' …' : ''}` : '장 밖(전역 설정)';
+      Log.warn(`  ${msg} — ${where}`);
+    }
+  }
+
   // Turns the old page-event script (<scene><node><inst><page>…) into the same timeline as buildStory.
   // Old pages record changes: a background/image fades in or out on a page and stays until it fades out.
   function buildOldStory(doc) {
@@ -410,9 +477,14 @@ const UCN = (() => {
     const q = (sel) => doc.querySelector(sel);
     const objects = {};
     for (const o of doc.querySelectorAll(':scope > object > node')) {
-      objects[o.getAttribute('name')] = {
-        type: o.getAttribute('type'), category: o.getAttribute('category'),
+      const at = (k) => o.getAttribute(k);
+      objects[at('name')] = {
+        type: at('type'), category: at('category'), ex: at('ex'),
         file: o.querySelector('frame')?.getAttribute('load') ?? null,
+        // component settings (ex="input"/"timer")
+        bgcolor: (at('bgcolor') || '0x0').replace(/^0x/i, '').padStart(6, '0'), alpha: num(at('alpha')),
+        color: (at('color') || '0xffffff').replace(/^0x/i, '').padStart(6, '0'),
+        title: at('title') || '', text: at('text') || '', time: at('time') != null ? num(at('time'), 5) : null,
       };
     }
     const layers = {};
@@ -429,6 +501,7 @@ const UCN = (() => {
     const fontNode = q(':scope > global > font > node');
     const fontSize = Math.max(num(fontNode?.getAttribute('size'), 12), 14);
 
+    checkOldSchema(doc);
     const pageEls = [...doc.querySelectorAll(':scope > scene > node > inst > page')];
     const total = pageEls.length;
     const scenes = doc.querySelectorAll(':scope > scene > node').length;
@@ -436,7 +509,7 @@ const UCN = (() => {
     Log.ok(`옛 형식 장면 "${q(':scope > scene > node')?.getAttribute('name') ?? ''}": ${total}장, 오브젝트 ${Object.keys(objects).length}개`);
 
     const pages = [];
-    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], timers: [], text: null, bgm: null, notes: [] });
+    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], timers: [], text: null, bgm: null, notes: [], infos: [] });
     const unknown = new Map();
     const note = (what) => unknown.set(what, (unknown.get(what) || 0) + 1);
     const fx = (e, which) => {
@@ -485,13 +558,14 @@ const UCN = (() => {
           const box = { x: num(a('x')), y: num(a('y')), width: num(a('width')), height: num(a('height')) };
           if (a('fadein') != null) {
             const type = a('type') || '';
+            const co = obj(name);
             if (type === 'timer') {
               pg.timers.push({ key: `timer${p}`, id: `timer${p}`, ...box, hidden: false, onStart: null, onFinish: steps(c),
-                style: { maxtime: timerSeconds, color: 'ffffff', background: '0', opacity: 0, radius: 0, border: 0 } });
+                style: { maxtime: co?.time ?? timerSeconds, color: co?.color ?? 'ffffff', background: co?.bgcolor ?? '0', opacity: co?.alpha ?? 0, radius: 0, border: 0 } });
+              if (co?.title) pg.notes.push(`타이머 제목 "${co.title}" 미표시`);
             } else if (type === 'input') {
-              const color = (el.querySelector('content')?.getAttribute('color') || '0xffffff').replace(/^0x/i, '').padStart(6, '0');
-              pg.inputs.push({ key: `input${p}`, id: `input${p}`, ref: name, ...box, handler: steps(c),
-                style: { background: 'ffffff', opacity: 0, border: 0, radius: 0, btncolor: color, btnbackground: 'ffffff', btnopacity: 0 } });
+              pg.inputs.push({ key: `input${p}`, id: `input${p}`, ref: name, ...box, handler: steps(c), title: co?.title || '', initial: co?.text || '',
+                style: { background: co?.bgcolor ?? '0', opacity: co?.alpha ?? 0, border: 0, radius: 0, btncolor: co?.color ?? 'ffffff', btnbackground: 'ffffff', btnopacity: 0 } });
             } else {
               if (type) note(`이미지 종류 type="${type}" (그림으로 표시)`);
               const o = obj(name);
@@ -531,8 +605,16 @@ const UCN = (() => {
       // Advance: input/timer pages wait for them; pages with text wait for a click (event 2 moves on
       // after a while); pages without text were the old studio's timed pauses: move on after the effects.
       if (pg.inputs.length || pg.timers.length) pg.advance = { mode: 'input' };
-      else if (pg.text) pg.advance = pg.autoEvent ? { mode: 'auto', ms: 3000 } : { mode: 'click' };
-      else pg.advance = { mode: 'auto', ms: Math.max(1000, effectMs + 300) };
+      else if (pg.text) {
+        pg.advance = pg.autoEvent ? { mode: 'auto', ms: 3000 } : { mode: 'click' };
+        if (pg.autoEvent) pg.infos.push('글 상자 event="2" → 글을 다 보여 준 뒤 3초 후 자동 넘김(추정)');
+      } else {
+        pg.advance = { mode: 'auto', ms: Math.max(1000, effectMs + 300) };
+        pg.infos.push(`글 없는 장 → ${(pg.advance.ms / 1000).toFixed(1)}초 뒤 자동 넘김(추정${pg.autoEvent ? ', event="2"' : ''})`);
+      }
+      for (const c of el.children) {
+        if (c.getAttribute('fadeout') === 'reserved') pg.infos.push(`${c.tagName === 'image' ? '이미지' : '배경'} 퇴장 "reserved" → 효과 없이 다음 그림 아래에 남았다 사라짐(추정)`);
+      }
     });
     for (const it of items) {
       if (it.end === Infinity) it.end = total;
@@ -543,6 +625,20 @@ const UCN = (() => {
     }
     for (const pg of pages) pg.images.sort((i, j) => i.z - j.z || i.order - j.order);
     for (const [what, count] of unknown) Log.warn(`처리하지 않은 항목: ${what} ×${count}`);
+    const tags = new Map();
+    for (const pg of pages) {
+      for (const m of (pg.text?.text ?? '').matchAll(/([#$])([^;#$\s]{1,30});/g)) {
+        const k = m[1] + m[2].split('.')[0] + ';';
+        if (!tags.has(k)) tags.set(k, []);
+        tags.get(k).push(pg.page);
+      }
+    }
+    if (tags.size) Log.info(`텍스트 태그 사용: ${[...tags].map(([k, v]) => `${k}×${v.length}`).join(', ')}`);
+    for (const [k, ps] of tags) {
+      const where = ps.slice(0, 8).map((p) => `${p}장`).join(', ') + (ps.length > 8 ? ' …' : '');
+      if (k[0] === '$') { if (!(k.slice(1, -1).replace(/\[\d+\]$/, '') in vars)) Log.warn(`선언되지 않은 변수 ${k} — 빈칸으로 표시 (${where})`); }
+      else if (!['#w;', '#c;', '#d;'].includes(k)) Log.warn(`처음 보는 텍스트 태그 ${k} — 무시함 (${where})`);
+    }
     const blank = pages.filter((p) => !p.text && p.advance.mode === 'auto').length;
     Log.info(`옛 형식 해석 규칙(추정): 글 없는 장 ${blank}개는 효과 시간 뒤 자동 넘김, event=2 장은 3초 뒤 자동, 글창은 검정에 alpha% 불투명도, 글자 크기 ${fontSize}px`);
     const resources = {};
