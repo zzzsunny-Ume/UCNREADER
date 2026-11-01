@@ -100,6 +100,15 @@
 - 스타일: 위치·크기·색·정렬·위아래 여백(`vPadding`)·좌우 여백(`hPadding`)·줄간격(`fontSize + leading`). 외곽선(`outlinecolor`·`outlineAlpha`)과 그림자(`shadowcolor`·`shadowAlpha`)는 원본 앱이 값을 읽기만 하고 그리지 않으므로 그리지 않음(예전 버전은 검정 1px 외곽선을 그려 어두운 글자가 번져 보였음).
 - 글창: 원본 `UCScenario.setProperty`처럼 텍스트 노드 영역을 `background` 색, 불투명도 `opacity`/100으로 칠하고, `border`가 있으면 `bordercolor` 1px 테두리, 모서리는 `radius`×4 지름(CSS `radius`×2)으로 둥글게. 첫 표본은 `opacity=0`(투명, 대신 레터박스 이미지 사용), 둘째 표본은 `opacity=100`(검은 글창).
 
+## 브라우저 다크 모드
+
+작품은 파일에 저장된 색 그대로 보여야 하므로, 브라우저의 "웹사이트 다크 모드"가 색을 바꾸지 못하게 합니다.
+- `<meta name="color-scheme" content="dark">`, `:root { color-scheme: dark }`: 크롬 계열 자동 다크 모드는 이미 다크 테마를 선언한 페이지에 적용되지 않음.
+- `@media (prefers-color-scheme: dark)` 규칙: 삼성 인터넷은 다크 테마 규칙이 있는 사이트에 자체 다크 모드를 적용하지 않음.
+- `<meta name="supported-color-schemes" content="dark">`: 예전 브라우저용.
+- 그래도 페이지 전체에 색 필터가 걸리면 시작할 때 로그에 경고(`브라우저가 화면에 색 필터를 적용함`).
+- 표본(셋째 작품)은 흰 글창(`background=ffffff`, `opacity=100`)에 #515151 글자. 삼성 인터넷 다크 모드에서 진회색 글창·밝은 글자로 반전돼 보인 사례가 있었음.
+
 ## 타이머
 
 - 리소스: `<object type="image" advtype="timer" maxtime color outlinecolor outlineAlpha shadowcolor shadowAlpha background opacity radius border bordercolor>`. 그림 파일은 편집기용 자리표시라 표시하지 않음.

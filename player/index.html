@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The page is dark by design: stop browsers (e.g. Samsung Internet dark mode) from recolouring the story. -->
 <meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
 <title>UCN Reader</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,6 +22,12 @@
     --card-hi: #17161a;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* A real dark-scheme rule: browsers with their own website dark mode (Samsung Internet) skip pages
+     that ship one, so the story keeps the colours stored in the file. */
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; }
+    html, body { background: var(--bg); color: var(--fg); }
+  }
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
     font-family: 'Nanum Gothic', '나눔고딕', NanumGothic, sans-serif; }
@@ -304,6 +311,11 @@
   $('t-txt').addEventListener('click', () => loaded && Export.texts(loaded, title));
   $('t-open').addEventListener('click', () => location.reload());
   Log.info(`UCN Reader 시작 · ${navigator.userAgent}`);
+  // Some browsers darken pages by putting an invert filter on the root: flag it so it's visible in the log.
+  for (const el of [document.documentElement, document.body]) {
+    const f = getComputedStyle(el).filter;
+    if (f && f !== 'none') Log.warn(`브라우저가 화면에 색 필터를 적용함(${f}) — 작품 색이 바뀌어 보일 수 있음. 브라우저 다크 모드를 꺼 주세요`);
+  }
   if (!('DecompressionStream' in window)) Log.error('이 브라우저는 압축 해제(DecompressionStream)를 지원하지 않습니다. 최신 Chrome·Edge·Safari·Firefox를 사용하세요.');
 
   async function openFile(file) {
