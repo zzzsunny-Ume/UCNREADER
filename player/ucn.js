@@ -2,7 +2,7 @@
 // per-page timeline. Mirrors tools/ucn_extract.py; see docs/UCN_FORMAT.md.
 // Every step reports to Log so readers can send the log when a file fails.
 const UCN = (() => {
-  const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
+  const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', mp3: 'audio/mpeg' };
   const COMPONENT = { button: '버튼', timer: '타이머', text: '텍스트', graph: '그래프', sprite: '스프라이트', video: '동영상', animation: '애니메이션' };
   const KNOWN_LAYERS = new Set(['scenario', 'back', 'bgm', 'image', 'effect', 'group']);
 
@@ -364,10 +364,201 @@ const UCN = (() => {
     return out;
   }
 
+  // ---- old studio format (.ucn v1) -------------------------------------------------
+  // 16-byte header (2, entry count, 0, 1), then one 1072-byte index record per entry, XOR 0x47:
+  // u32 offset, u32 size, u32 offset again, u32 type (15), 12 zero bytes, CP949 file name (0xCD padded).
+  // File data follows the index unchanged; music is stored inside as mp3.
+  const OLD_RECORD = 1072;
+
+  function isOldFormat(u8) {
+    if (u8.length < 16 + OLD_RECORD) return false;
+    const dv = new DataView(u8.buffer, u8.byteOffset);
+    const n = dv.getUint32(4, true);
+    return dv.getUint32(0, true) === 2 && dv.getUint32(12, true) === 1 && n > 0 && 16 + n * OLD_RECORD < u8.length
+      && (u8[16 + 28] ^ 0x47) >= 0x20; // first file name starts with a printable byte
+  }
+
+  function unpackOld(buf) {
+    const u8 = new Uint8Array(buf);
+    const dv = new DataView(buf);
+    const n = dv.getUint32(4, true);
+    const base = 16 + n * OLD_RECORD;
+    const cp949 = new TextDecoder('euc-kr');
+    const entries = new Map();
+    Log.ok(`옛 스튜디오 형식(.ucn v1): 엔트리 ${n}개, 목차 XOR 0x47`);
+    let thumbs = 0;
+    for (let i = 0; i < n; i++) {
+      const rec = u8.slice(16 + i * OLD_RECORD, 16 + (i + 1) * OLD_RECORD).map((b) => b ^ 0x47);
+      const rv = new DataView(rec.buffer);
+      const off = rv.getUint32(0, true), size = rv.getUint32(4, true);
+      const end = rec.indexOf(0, 28);
+      const name = cp949.decode(rec.subarray(28, end < 0 ? rec.length : end));
+      if (base + off + size > u8.length) { Log.error(`#${i + 1} ${name}: 데이터가 파일 끝을 넘어감`); continue; }
+      if (name.endsWith('_th')) { thumbs++; continue; } // editor thumbnails
+      entries.set(name, u8.subarray(base + off, base + off + size));
+    }
+    const kinds = {};
+    for (const name of entries.keys()) { const e = name.split('.').pop().toLowerCase(); kinds[e] = (kinds[e] || 0) + 1; }
+    Log.ok(`옛 형식 파일 ${entries.size}개 읽음 (${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ')}), 썸네일 ${thumbs}개 제외`);
+    return entries;
+  }
+
+  // Turns the old page-event script (<scene><node><inst><page>…) into the same timeline as buildStory.
+  // Old pages record changes: a background/image fades in or out on a page and stays until it fades out.
+  function buildOldStory(doc) {
+    const W = 640, H = 480;
+    const q = (sel) => doc.querySelector(sel);
+    const objects = {};
+    for (const o of doc.querySelectorAll(':scope > object > node')) {
+      objects[o.getAttribute('name')] = {
+        type: o.getAttribute('type'), category: o.getAttribute('category'),
+        file: o.querySelector('frame')?.getAttribute('load') ?? null,
+      };
+    }
+    const layers = {};
+    for (const l of doc.querySelectorAll(':scope > scene > node > layer > layer')) layers[l.getAttribute('name')] = l.getAttribute('object');
+    const obj = (layerName) => objects[layers[layerName] ?? layerName] ?? null;
+
+    const vars = {};
+    let timerSeconds = 5;
+    for (const v of doc.querySelectorAll(':scope > global > var > node')) {
+      const name = (v.getAttribute('name') || '').replace(/^\$/, '');
+      if (v.getAttribute('type') === 'timer') timerSeconds = num(v.getAttribute('data'), 5);
+      else vars[name] = v.getAttribute('data') || '';
+    }
+    const fontNode = q(':scope > global > font > node');
+    const fontSize = Math.max(num(fontNode?.getAttribute('size'), 12), 14);
+
+    const pageEls = [...doc.querySelectorAll(':scope > scene > node > inst > page')];
+    const total = pageEls.length;
+    const scenes = doc.querySelectorAll(':scope > scene > node').length;
+    if (scenes > 1) Log.warn(`옛 형식 장면이 ${scenes}개 — 첫 장면만 재생`);
+    Log.ok(`옛 형식 장면 "${q(':scope > scene > node')?.getAttribute('name') ?? ''}": ${total}장, 오브젝트 ${Object.keys(objects).length}개`);
+
+    const pages = [];
+    for (let p = 1; p <= total; p++) pages.push({ page: p, advance: { mode: 'click' }, background: null, images: [], inputs: [], timers: [], text: null, bgm: null, notes: [] });
+    const unknown = new Map();
+    const note = (what) => unknown.set(what, (unknown.get(what) || 0) + 1);
+    const fx = (e, which) => {
+      const name = e.getAttribute(which);
+      // "reserved": no exit effect; the picture stays under the next one as it fades in.
+      return { effect: !name || name === 'reserved' ? 'none' : name, time: num(e.getAttribute('time')), x: 0, y: 0, width: null, height: null, rotation: 0, option: 'none' };
+    };
+    const steps = (img) => {
+      const out = [];
+      const v = img.querySelector('button > var')?.getAttribute('name');
+      if (v) out.push({ op: 'set', name: v.replace(/^\$/, '') });
+      const g = img.querySelector('button > goto');
+      if (g) {
+        const scene = g.getAttribute('scene');
+        if (scene === '다음 쪽') out.push({ op: 'next' });
+        else if (scene === '이전 쪽') out.push({ op: 'prev' });
+        else { note(`버튼 이동 대상 "${scene}" (다음 장으로 대체)`); out.push({ op: 'next' }); }
+      }
+      return out;
+    };
+
+    let order = 0, bg = null;
+    const items = [];
+    const live = new Map(); // image layer name -> item
+    pageEls.forEach((el, i) => {
+      const pg = pages[i];
+      const p = i + 1;
+      let effectMs = 0;
+      for (const c of el.children) {
+        const a = (k) => c.getAttribute(k);
+        if (c.tagName === 'background') {
+          const o = obj(a('name'));
+          if (!o) note(`없는 배경 "${a('name')}"`);
+          if (a('fadein') != null) {
+            if (bg && bg.end === Infinity) bg.end = p - 1;
+            bg = { key: `bg${p}`, ref: a('name'), file: o?.file, kind: 'back', start: p, end: Infinity, x: 0, y: 0, width: W, height: H, z: 0, order: ++order,
+              effects: { start: fx(c, 'fadein'), end: { effect: 'none', time: 0 } } };
+            items.push(bg);
+            effectMs = Math.max(effectMs, num(a('time')));
+          } else if (a('fadeout') != null && bg) {
+            bg.end = p;
+            bg.effects.end = fx(c, 'fadeout');
+          }
+        } else if (c.tagName === 'image') {
+          const name = a('name');
+          const box = { x: num(a('x')), y: num(a('y')), width: num(a('width')), height: num(a('height')) };
+          if (a('fadein') != null) {
+            const type = a('type') || '';
+            if (type === 'timer') {
+              pg.timers.push({ key: `timer${p}`, id: `timer${p}`, ...box, hidden: false, onStart: null, onFinish: steps(c),
+                style: { maxtime: timerSeconds, color: 'ffffff', background: '0', opacity: 0, radius: 0, border: 0 } });
+            } else if (type === 'input') {
+              const color = (el.querySelector('content')?.getAttribute('color') || '0xffffff').replace(/^0x/i, '').padStart(6, '0');
+              pg.inputs.push({ key: `input${p}`, id: `input${p}`, ref: name, ...box, handler: steps(c),
+                style: { background: 'ffffff', opacity: 0, border: 0, radius: 0, btncolor: color, btnbackground: 'ffffff', btnopacity: 0 } });
+            } else {
+              if (type) note(`이미지 종류 type="${type}" (그림으로 표시)`);
+              const o = obj(name);
+              if (!o) note(`없는 이미지 "${name}"`);
+              const item = { key: `img${p}-${name}`, ref: name, file: o?.file, kind: 'image', start: p, end: Infinity, ...box, z: order + 1, order: ++order,
+                effects: { start: fx(c, 'fadein'), end: { effect: 'none', time: 0 } } };
+              live.set(name, item);
+              items.push(item);
+            }
+            effectMs = Math.max(effectMs, num(a('time')));
+          } else if (a('fadeout') != null && live.has(name)) {
+            const item = live.get(name);
+            item.end = p;
+            item.effects.end = fx(c, 'fadeout');
+            live.delete(name);
+          }
+        } else if (c.tagName === 'bgm') {
+          const o = obj(a('name'));
+          if (a('name') && o?.file) pg.bgm = { key: a('name'), ref: layers[a('name')] ?? a('name'), file: o.file, loop: num(a('count'), 1) > 1 };
+          else if (a('name')) note(`없는 음악 "${a('name')}"`);
+        } else if (c.tagName === 'sound') {
+          if (a('name')) note('효과음 sound (미지원)');
+        } else if (c.tagName === 'content') {
+          const data = c.querySelector('text')?.getAttribute('data') ?? '';
+          const h = num(a('height')), lines = Math.max(num(a('line'), 3), 1);
+          if (num(a('event')) === 2) pg.autoEvent = true;
+          if (data.trim()) {
+            pg.text = {
+              text: data, x: num(a('x')), y: num(a('y')), width: num(a('width')), height: h, align: a('align') || 'center',
+              color: (a('color') || '0xffffff').replace(/^0x/i, '').padStart(6, '0'),
+              vPadding: 10, hPadding: 10, leading: Math.max(4, Math.floor((h - 20) / lines) - fontSize),
+              speed: 0, bg: '0', bgOpacity: num(a('alpha')), border: 0, bordercolor: 'ffffff', radius: 0,
+            };
+          }
+        } else note(`<${c.tagName}>`);
+      }
+      // Advance: input/timer pages wait for them; pages with text wait for a click (event 2 moves on
+      // after a while); pages without text were the old studio's timed pauses: move on after the effects.
+      if (pg.inputs.length || pg.timers.length) pg.advance = { mode: 'input' };
+      else if (pg.text) pg.advance = pg.autoEvent ? { mode: 'auto', ms: 3000 } : { mode: 'click' };
+      else pg.advance = { mode: 'auto', ms: Math.max(1000, effectMs + 300) };
+    });
+    for (const it of items) {
+      if (it.end === Infinity) it.end = total;
+      for (let p = it.start; p <= it.end; p++) {
+        if (it.kind === 'back') pages[p - 1].background = it;
+        else pages[p - 1].images.push(it);
+      }
+    }
+    for (const pg of pages) pg.images.sort((i, j) => i.z - j.z || i.order - j.order);
+    for (const [what, count] of unknown) Log.warn(`처리하지 않은 항목: ${what} ×${count}`);
+    const blank = pages.filter((p) => !p.text && p.advance.mode === 'auto').length;
+    Log.info(`옛 형식 해석 규칙(추정): 글 없는 장 ${blank}개는 효과 시간 뒤 자동 넘김, event=2 장은 3초 뒤 자동, 글창은 검정에 alpha% 불투명도, 글자 크기 ${fontSize}px`);
+    const resources = {};
+    for (const [name, o] of Object.entries(objects)) resources[name] = { type: o.category === 'bgm' ? 'bgm' : o.category === 'bg' ? 'back' : 'image', file: o.file };
+    const texts = {};
+    pages.forEach((pg) => { if (pg.text) texts[pg.page] = pg.text.text; });
+    Log.ok(`타임라인 완성: 텍스트 ${pages.filter((p) => p.text).length}장, 자동 넘김 ${pages.filter((p) => p.advance.mode === 'auto').length}장, 입력창 ${pages.reduce((n, p) => n + p.inputs.length, 0)}개, 타이머 ${pages.reduce((n, p) => n + p.timers.length, 0)}개, 음악 ${new Set(pages.map((p) => p.bgm?.key).filter(Boolean)).size}곡`);
+    return { width: W, height: H, font: fontNode?.getAttribute('name') ?? null, fontSize, resources, texts, vars, pages, format: 'v1' };
+  }
+
   async function load(file) {
     Log.info(`파일 열기: ${file.name} (${(file.size / 1048576).toFixed(2)}MB)`);
     const t0 = performance.now();
-    const entries = await unpack(await file.arrayBuffer());
+    const buf = await file.arrayBuffer();
+    const old = isOldFormat(new Uint8Array(buf));
+    const entries = old ? unpackOld(buf) : await unpack(buf);
     const xmlBytes = entries.get('script.xml');
     if (!xmlBytes) throw new Error('script.xml을 찾을 수 없습니다. .ucn 파일이 맞나요?');
     const xml = new TextDecoder('utf-8').decode(xmlBytes);
@@ -376,12 +567,12 @@ const UCN = (() => {
     if (err) throw new Error(`script.xml 해석 실패: ${err.textContent.trim().slice(0, 200)}`);
     Log.ok(`script.xml 해석 성공 (${kb(xmlBytes.length)}, 작성자 ${doc.documentElement.getAttribute('owner') || '알 수 없음'})`);
 
-    const story = buildStory(doc);
+    const story = old || doc.querySelector(':scope > scene > node > inst') ? buildOldStory(doc) : buildStory(doc);
     const files = new Map();
     for (const [name, data] of entries) {
       if (name === 'script.xml') continue;
       const ext = name.split('.').pop().toLowerCase();
-      if (!MIME[ext]) Log.warn(`이미지가 아닌 파일: ${name}`);
+      if (!MIME[ext]) Log.warn(`알 수 없는 종류의 파일: ${name}`);
       files.set(base(name), { name, data, url: URL.createObjectURL(new Blob([data], { type: MIME[ext] || 'application/octet-stream' })) });
     }
     const referenced = new Set(Object.values(story.resources).filter((r) => r.type !== 'bgm' && r.file).map((r) => base(r.file)));

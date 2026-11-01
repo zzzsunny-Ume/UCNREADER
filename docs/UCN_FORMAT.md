@@ -92,3 +92,46 @@ ZIP을 살짝 변형한 구조입니다.
 유씨노벨 안드로이드 플레이어 1.0.6(`air.com.ucnovel.player`, Adobe AIR)의 `assets/UCMobilePlayer4.swf`를
 역어셈블해 위 규칙을 확인했습니다. 작품 스크립트 라이브러리 함수는 74개
 (`gotoPage`, `showNode`, `playSound`, `setData`, `menu`, `alert` 등)이며, 이 저장소의 웹 플레이어는 아직 스크립트를 실행하지 않습니다.
+
+## 옛 스튜디오 형식 (.ucn v1)
+
+표본: "온페어의 개척자" p.01~03(각 약 48MB, 2015년 작성). 머리말 마지막 값이 `1`(새 형식은 `6`)이고 ZIP 구조가 아닙니다.
+
+### 컨테이너
+| 위치 | 내용 |
+|---|---|
+| 0x00 (16바이트) | `u32 2`, `u32 엔트리 수`, `u32 0`, `u32 1` |
+| 0x10 | 엔트리마다 1072바이트 목차 레코드, **XOR 0x47**로 가림 |
+| 목차 뒤 | 파일 데이터를 이어 붙임(가림·압축 없음) |
+
+목차 레코드(XOR을 푼 뒤): `u32 오프셋`(데이터 시작 기준), `u32 크기`, `u32 오프셋(반복)`, `u32 15`, 0 12바이트, **CP949** 파일 이름(남는 칸은 `0xCD`, MSVC 구조체를 그대로 기록). `*_th`는 편집기 썸네일, 마지막 엔트리가 `script.xml`(평문 UTF-8).
+**음원(mp3)이 파일 안에 들어 있습니다**(표본당 약 104곡).
+
+### script.xml
+```
+<ucscript>
+  <global> <font><node id size name/></font> <color/> <option><text event speed/></option>
+           <var><node name="$타이머" type="timer" data="5"/><node name="$성" type="string"/>…</var> </global>
+  <folder> … </folder>
+  <object> <node name type="image|sound" category="bg|image|bgm" width height><frame load="파일이름"/></node> … </object>
+  <character …/>
+  <scene><node name="시작장면">
+    <layer><layer name="이름(1)" object="오브젝트 이름"/> … </layer>
+    <inst><page id="0"> … </page> …</inst>
+  </node></scene>
+</ucscript>
+```
+화면 640×480. 장(`page`)은 **그 장에서 일어나는 변화**만 순서대로 적습니다.
+
+| 요소 | 의미 |
+|---|---|
+| `<background fadein="fade" name time>` | 배경 등장(효과, ms). `fadeout`이 나올 때까지 유지 |
+| `<background fadeout="reserved\|fade\|dust" name time>` | 이 장을 끝으로 배경 퇴장. `reserved`는 효과 없이 다음 배경 아래에 남았다 사라짐 |
+| `<image fadein name x y width height type>` | 이미지 등장, `fadeout`까지 유지. `type="timer"`(카운트다운, `$타이머`초), `type="input"`(입력창) |
+| `<image …><button><var name="$성"/><goto scene="다음 쪽" page="1"/></button>` | 입력값을 변수에 넣고 다음 장으로 |
+| `<bgm name count>` | 이 장의 음악(레이어 이름), 비어 있으면 무음, 같은 이름이 이어지면 계속 재생. `count`는 반복 횟수 |
+| `<sound name>` | 효과음(표본은 모두 비어 있음) |
+| `<content x y width height line align alpha color speed event head><text data/></content>` | 글 상자와 글. `alpha`는 검은 글창 불투명도(%), `line`은 줄 수, `color`는 `0xRRGGBB`. 글 표기는 새 형식과 같음(`#p`, `#w;`, `$이름;`) |
+
+추정한 규칙(원본 플레이어 코드가 없어 확인 불가): 글 없는 장은 효과 시간 뒤 자동 넘김(작가가 시간 연출로 사용), `event="2"`는 자동 넘김(3초), 글창 색은 검정, 글자 크기는 `font` 첫 항목(최소 14px).
+

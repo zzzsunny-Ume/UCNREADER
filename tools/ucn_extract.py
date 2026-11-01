@@ -33,6 +33,29 @@ def decode_name(raw):
     return ''.join(out)
 
 
+OLD_RECORD = 1072
+
+
+def is_old_format(data):
+    """Old studio files: header (2, count, 0, 1) and an XOR-0x47 index, no ZIP headers."""
+    if len(data) < 16 + OLD_RECORD:
+        return False
+    a, n, _, d = struct.unpack('<4I', data[:16])
+    return a == 2 and d == 1 and 0 < n and 16 + n * OLD_RECORD < len(data)
+
+
+def read_old_entries(data):
+    """Yield (name, payload) from an old studio .ucn; editor thumbnails (*_th) are skipped."""
+    n = struct.unpack('<I', data[4:8])[0]
+    base = 16 + n * OLD_RECORD
+    for i in range(n):
+        rec = bytes(b ^ 0x47 for b in data[16 + i * OLD_RECORD:16 + (i + 1) * OLD_RECORD])
+        off, size = struct.unpack('<2I', rec[:8])
+        name = rec[28:].split(b'\0')[0].decode('cp949', 'replace')
+        if not name.endswith('_th'):
+            yield name, data[base + off:base + off + size]
+
+
 def read_entries(data):
     """Yield (name, payload) for each local file header after the 16-byte prefix."""
     off = 16
@@ -180,7 +203,8 @@ def main():
     data = open(src, 'rb').read()
     os.makedirs(os.path.join(out, 'assets'), exist_ok=True)
     script = None
-    for name, payload in read_entries(data):
+    old = is_old_format(data)
+    for name, payload in (read_old_entries(data) if old else read_entries(data)):
         if name == 'script.xml':
             script = payload
             path = os.path.join(out, name)
@@ -188,6 +212,10 @@ def main():
             path = os.path.join(out, 'assets', os.path.basename(name))
         with open(path, 'wb') as f:
             f.write(payload)
+    if old:
+        # The old page-event script is converted by the web player (player/ucn.js, buildOldStory).
+        print(f'old studio format: files and script.xml extracted to {out} (no story.json)')
+        return
     story = build_story(ET.fromstring(script))
     with open(os.path.join(out, 'story.json'), 'w', encoding='utf-8') as f:
         json.dump(story, f, ensure_ascii=False, indent=1)

@@ -52,7 +52,7 @@ const Export = (() => {
   }
 
   function images(data, title) {
-    const list = [...data.files.values()].map((f) => ({ name: f.name.split('/').pop(), data: f.data }));
+    const list = [...data.files.values()].filter((f) => /\.(png|jpe?g|gif|bmp|webp)$/i.test(f.name)).map((f) => ({ name: f.name.split('/').pop(), data: f.data }));
     if (!list.length) { Log.warn('저장할 사진이 없습니다'); return; }
     const blob = zip(list);
     save(blob, `${title}_사진.zip`);

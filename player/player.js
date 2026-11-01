@@ -228,6 +228,57 @@ const Player = (() => {
     const el = $('bgm');
     const name = pg.bgm ? `▶ ${pg.bgm.ref.replace(/\(\d+\)$/, '').trim()}.mp3` : '';
     if (el.textContent !== name) el.textContent = name;
+    playMusic(pg.bgm);
+  }
+
+  // ---- music -----------------------------------------------------------------------
+  // Old-format files carry their mp3s: play the page's track, looping, crossfading 1.5 s on changes.
+  // New-format files only name a server path that no longer exists, so they just show the title.
+  // Two <audio> elements are unlocked on the "start" tap so phones (iOS) let later pages play.
+  const players = [];
+  let music = null; // { key, el }
+
+  function unlockAudio() {
+    while (players.length < 2) {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.play().catch(() => {});
+      el.pause();
+      players.push(el);
+    }
+  }
+
+  function fade(el, to, ms, done) {
+    clearInterval(el._fade);
+    const from = el.volume, t0 = performance.now();
+    el._fade = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      el.volume = Math.max(0, Math.min(1, from + (to - from) * k));
+      if (k >= 1) { clearInterval(el._fade); done?.(); }
+    }, 50);
+  }
+
+  function playMusic(bgm) {
+    const url = bgm?.file && urls.get(bgm.file.split('/').pop());
+    const key = url ? bgm.key : null;
+    if ((music?.key ?? null) === key) return;
+    if (music) { const old = music.el; fade(old, 0, 1500, () => old.pause()); }
+    music = null;
+    if (!url) return;
+    const el = players.find((p) => p.paused) || new Audio();
+    el.src = url;
+    el.loop = bgm.loop !== false;
+    el.volume = 0;
+    music = { key, el };
+    el.play().then(() => {
+      fade(el, 0.8, 1500);
+      Log.info(`${idx + 1}장 음악 재생: ${bgm.ref}`);
+    }).catch((e) => Log.warn(`음악을 재생하지 못함(${e.name}) — 브라우저가 자동 재생을 막았을 수 있음. 화면을 한 번 눌러 주세요`));
+  }
+
+  function stopMusic() {
+    if (music) { const old = music.el; fade(old, 0, 800, () => old.pause()); }
+    music = null;
   }
 
   // ---- text ----------------------------------------------------------------
@@ -519,6 +570,7 @@ const Player = (() => {
   function showEnd() {
     clearTimeout(timer);
     clearTimers();
+    stopMusic();
     stopTyping();
     $('textbox').hidden = true;
     $('bgm').textContent = '';
@@ -545,6 +597,7 @@ const Player = (() => {
   }
 
   function begin() {
+    unlockAudio();
     $('begin').hidden = true;
     go(0);
   }
